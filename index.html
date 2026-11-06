@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 14:57'; window.__BID__ = '2026-11-06 14:57:39';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 15:03'; window.__BID__ = '2026-11-06 15:03:31';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -789,7 +789,9 @@ function splitCard(h) {
 function parseTapLoose(h) {
   const m = h.replace(/^#/, '').match(/^tap-(\d{8,14})-(.+)$/);
   if (!m) return null;
-  let rest = m[2];
+  let rest = m[2]
+    .replace(/\bUS\s*\$|\$\s*US\b/g, ' USD ').replace(/\bCA\s*\$/g, ' CAD ').replace(/\bA\$|\bAU\s*\$/g, ' AUD ')
+    .replace(/\u20ac/g, ' EUR ').replace(/\u00a3/g, ' GBP ').replace(/\u20b9/g, ' INR ').replace(/\u00a5/g, ' JPY ').replace(/\$/g, ' USD ');
   const am = rest.match(/\d[\d.,]*\d|\d/);
   if (!am) return null;
   const amount = Math.abs(parseMoney(am[0]));
