@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:53'; window.__BID__ = '2026-11-06 09:53:10';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 10:05'; window.__BID__ = '2026-11-06 10:05:50';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -628,7 +628,7 @@ function parseStatement(text, opts, rules, existing) {
     all.unshift(['account', 'currency', 'date', 'begin', 'end', 'rente', 'amount', 'description']);
     h = 0;
   }
-  if (h < 0) return { error: 'Could not find Date and Amount columns. The first row of the file should name them.' };
+  if (h < 0) return { error: 'Could not read this file. Use the TXT download from ABN AMRO or the CSV from ING. The Excel (XLS) one cannot be read.' };
   const head = all[h].map(function (c) { return String(c).toLowerCase().trim(); });
   const body = all.slice(h + 1);
   function find(re, not) {
@@ -2353,7 +2353,7 @@ function addHTML() {
     scanSectionHTML() +
     '<section><h2>Import a statement</h2><div class="card pad stack">' +
     '<p class="small muted">Upload a CSV from your bank or card. Expenses are sorted into categories on the spot, and rows you already have are skipped. For a PDF statement, send it to Claude in chat and ask for a CSV.</p>' +
-    '<label>CSV file<input id="impfile" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain"></label>' +
+    '<label>CSV file<input id="impfile" type="file"></label>' +
     '<label>Or paste the rows<textarea id="imptext" placeholder="Date,Description,Amount"></textarea></label>' +
     '<div class="btns"><button class="btn" data-act="imp-parse">Review import</button></div><div id="impBox"></div></div></section>' +
     backupHTML() +
