@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 11:14'; window.__BID__ = '2026-11-06 11:14:01';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 11:24'; window.__BID__ = '2026-11-06 11:24:08';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -724,6 +724,58 @@ function compareStatements(ing, abn, ledger) {
   const count = { new: 0, ledger: 0, transfer: 0, card: 0 };
   rows.forEach(function (r) { count[r.status]++; });
   return { rows: rows, count: count };
+}
+
+
+/* Same payee under two names (for example family members): rename to the second name */
+function applyAlias(name, aliases) {
+  const n = norm(name);
+  for (let i = 0; i < (aliases || []).length; i++) {
+    const a = aliases[i];
+    if (a && a.from && n.indexOf(norm(a.from).trim()) >= 0) return a.to;
+  }
+  return name;
+}
+/* Find payments that repeat every month, and match them to the bills already in the budget. */
+function detectRecurring(rows, bills) {
+  function dn(x) { const p = String(x).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5); }
+  const groups = {};
+  (rows || []).forEach(function (r) {
+    if (!(r.a > 0) || r.status === 'transfer' || r.status === 'card') return;
+    const key = norm(r.m).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).join(' ');
+    if (key.length < 3) return;
+    (groups[key] = groups[key] || []).push(r);
+  });
+  const found = [];
+  Object.keys(groups).forEach(function (k) {
+    const g = groups[k].slice().sort(function (a, b) { return a.d < b.d ? -1 : 1; });
+    const months = {};
+    g.forEach(function (r) { months[r.d.slice(0, 7)] = (months[r.d.slice(0, 7)] || 0) + 1; });
+    const nm = Object.keys(months).length;
+    if (nm < 2 || g.length > nm * 1.5) return;
+    const amts = g.map(function (r) { return r.a; }).sort(function (a, b) { return a - b; });
+    const med = amts[Math.floor(amts.length / 2)];
+    if (amts.some(function (a) { return Math.abs(a - med) > Math.max(1, med * 0.15); })) return;
+    const last = g[g.length - 1];
+    found.push({ name: last.m, amount: last.a, day: +last.d.slice(8), cat: last.c === 'Income' ? 'Other' : last.c, bank: last.bank || '', months: nm, bill: null, key: k });
+  });
+  const used = {};
+  found.forEach(function (f) {
+    let best = null, bd = 1e9;
+    (bills || []).forEach(function (b) {
+      if (used[b.id] || b.cat === 'Transfer') return;
+      const bn = norm(b.name).trim(), fn2 = norm(f.name).trim();
+      const w = bn.split(' ')[0], w2 = fn2.split(' ')[0];
+      const nameHit = (w.length >= 4 && fn2.indexOf(w) >= 0) || (w2.length >= 4 && bn.indexOf(w2) >= 0);
+      const diff = Math.abs(b.amount - f.amount);
+      const numHit = diff <= Math.max(2, f.amount * 0.2) && Math.abs(b.day - f.day) <= 5;
+      if (nameHit || numHit) { const score = (nameHit ? 0 : 100) + diff; if (score < bd) { bd = score; best = b; } }
+    });
+    if (best) { used[best.id] = true; f.bill = best; }
+  });
+  found.sort(function (a, b) { return a.day - b.day; });
+  const missing = (bills || []).filter(function (b) { return !used[b.id] && b.cat !== 'Transfer'; });
+  return { found: found, missing: missing };
 }
 
 /* ---------- Apple Pay link and quick add ---------- */
@@ -1305,7 +1357,7 @@ const api = {
   FIXED: FIXED, VARIABLE: VARIABLE, SPEND_CATS: SPEND_CATS, ALL_CATS: ALL_CATS, DEFAULT_TYPE: DEFAULT_TYPE,
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
-  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, txKey: txKey,
+  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
   daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
@@ -2403,7 +2455,7 @@ function addHTML() {
     '<p class="small muted">Choose both bank files. Nothing is changed until you tap Import. The app shows what is missing from your ledger, and hides money you moved between your own accounts.</p>' +
     '<label>ING file<input id="cmping" type="file"></label>' +
     '<label>ABN AMRO file<input id="cmpabn" type="file"></label>' +
-    '<div class="btns"><button class="btn" data-act="cmp-run">Compare</button></div><div id="cmpBox"></div></div></section>' +
+    aliasHTML() + '<div class="btns"><button class="btn" data-act="cmp-run">Compare</button></div><div id="cmpBox"></div></div></section>' +
     backupHTML() +
     '<details class="card"><summary>Load a ledger file</summary><div class="body"><p class="small muted">Use a file made for you in chat (for example from your Google Sheets). This replaces what is in the ledger now.</p>' +
     '<label>Ledger file (.json)<input id="restorefile" type="file" accept=".json,application/json"></label><label>Or paste a copied backup<textarea id="restoretext" placeholder="Paste backup text here"></textarea></label><label class="inline"><input type="checkbox" id="restorepart"> Keep my entries, bills and trips. Load only savings, expected money and salary.</label><div class="btns"><button class="btn" data-act="restore" id="restorego">Load file</button></div></div></details>' +
@@ -2419,6 +2471,13 @@ function addHTML() {
 }
 
 /* ---------- import preview ---------- */
+function aliasList() { return S.profile.aliases || [{ from: 'b punjikunje', to: 'BBma' }]; }
+function aliasHTML() {
+  return '<p class="small muted">Same person or shop under two names? Tell the app and it will treat them as one.</p>' +
+    aliasList().map(function (a, i) { return '<div class="small">' + esc(a.from) + ' = ' + esc(a.to) + ' <button class="btn sm ghost" data-act="alias-del" data-i="' + i + '">Remove</button></div>'; }).join('') +
+    '<div class="grid2"><label>Name on the statement<input id="al-from" type="text" placeholder="B Punjikunje"></label><label>Show it as<input id="al-to" type="text" placeholder="BBma"></label></div>' +
+    '<div class="btns"><button class="btn sm" data-act="alias-add">Add</button></div>';
+}
 function existingKeys() {
   const ex = {};
   allTx().forEach(function (t) { ex[L.txKey(t)] = true; ex['da|' + t.d + '|' + Number(t.a).toFixed(2)] = true; });
@@ -2427,6 +2486,7 @@ function existingKeys() {
 function runParse() {
   const res = L.parseStatement(IMP.text, IMP.opts, S.profile.rules, existingKeys());
   IMP.res = res;
+  if (res.rows) res.rows.forEach(function (r) { r.m = L.applyAlias(r.m, aliasList()); });
   if (res.rows && !IMP.scan) {
     /* looser match: same amount within 5 days of an entry you already have (banks book a few days later). Each entry matches only once. */
     const pool = allTx().map(function (t) { return { d: t.d, c: Math.round(Number(t.a) * 100), used: false }; });
@@ -2462,6 +2522,16 @@ function renderImpBox() {
     '<div class="btns"><button class="btn" data-act="imp-go" id="impgo"></button><button class="btn ghost" data-act="imp-cancel">Cancel</button></div></div>';
   updateImpCount();
 }
+function recHTML() {
+  const rec = IMP.rec;
+  if (!rec || !rec.found.length) return '<div class="note">No monthly fixed costs found. They need at least 2 months of statements, so download 3 months from each bank.</div>';
+  return '<div class="card pad stack"><b>Monthly fixed costs found</b><p class="small muted">Tick the ones to put in your budget. Where a matching bill exists, it is replaced with the real name, amount and day.</p>' +
+    rec.found.map(function (f, i) {
+      return '<label class="inline"><input type="checkbox" data-bind="rec-use" data-i="' + i + '"' + (f.use ? ' checked' : '') + '> <span>' + esc(f.name) + ': ' + money(f.amount, true) + ' on day ' + f.day + ' (' + f.bank + ', ' + f.months + ' months)<br><small class="muted">' + (f.bill ? 'replaces ' + esc(f.bill.name) + ', ' + money(f.bill.amount, true) + ' on day ' + f.bill.day : 'new bill') + '</small></span></label>';
+    }).join('') +
+    (rec.missing.length ? '<p class="small muted">Not seen in the statements, left as they are: ' + rec.missing.map(function (b) { return esc(b.name); }).join(', ') + '.</p>' : '') +
+    '<div class="btns"><button class="btn" data-act="rec-apply">Update budget</button></div></div>';
+}
 function renderCmp() {
   const box = $('#cmpBox');
   if (!box || !IMP || !IMP.cmp) return;
@@ -2476,7 +2546,7 @@ function renderCmp() {
     return '<details class="card"' + (open ? ' open' : '') + '><summary>' + title + ' (' + c[st] + ')</summary><div class="body"><div class="imp-scroll">' + list + '</div></div></details>';
   }
   box.innerHTML = '<div class="stack"><div class="note"><b>' + rows.length + ' rows.</b> ' + c.new + ' not in your ledger, ' + c.ledger + ' already there, ' + c.transfer + ' moved between your accounts, ' + c.card + ' card bill payments.</div>' +
-    group('new', 'Not in your ledger', true) + group('transfer', 'Moved between your accounts', false) + group('card', 'Card bill payments', false) + group('ledger', 'Already in your ledger', false) +
+    recHTML() + group('new', 'Not in your ledger', true) + group('transfer', 'Moved between your accounts', false) + group('card', 'Card bill payments', false) + group('ledger', 'Already in your ledger', false) +
     '<div class="btns"><button class="btn" data-act="imp-go" id="impgo"></button><button class="btn ghost" data-act="imp-cancel">Cancel</button></div></div>';
   updateImpCount();
 }
@@ -3010,6 +3080,32 @@ function onAction(act, el) {
     }
     case 'scan-stop': if (scanCtl) scanCtl.abort(); break;
     case 'scan-go': scanReceipts(); break;
+    case 'alias-add': {
+      const f = val('al-from').trim(), t = val('al-to').trim();
+      if (!f || !t) { toast('Fill in both names'); break; }
+      mutate(function () { S.profile.aliases = aliasList().concat([{ from: f, to: t }]); markProfile(); });
+      render(); toast('Saved'); break;
+    }
+    case 'alias-del': {
+      mutate(function () { const a = aliasList().slice(); a.splice(+el.dataset.i, 1); S.profile.aliases = a; markProfile(); });
+      render(); break;
+    }
+    case 'rec-apply': {
+      const picks = (IMP && IMP.rec ? IMP.rec.found : []).filter(function (f) { return f.use; });
+      if (!picks.length) { toast('Tick at least one'); break; }
+      mutate(function () {
+        S.profile.bills = S.profile.bills || [];
+        picks.forEach(function (f) {
+          const acct = f.bank === 'ABN' ? 'abn' : 'other';
+          let b = f.bill && S.profile.bills.filter(function (x) { return x.id === f.bill.id; })[0];
+          if (b) { b.name = f.name; b.amount = f.amount; b.day = f.day; b.cat = f.cat || b.cat; b.acct = acct; }
+          else { b = { id: L.uid(), name: f.name, cat: f.cat || 'Other', amount: f.amount, day: f.day, acct: acct }; S.profile.bills.push(b); }
+          relocateBill(b);
+        });
+        markProfile(); syncAll();
+      });
+      toast('Budget updated: ' + picks.length); IMP = null; render(); break;
+    }
     case 'cmp-run': {
       const read = function (id) {
         const f = $(id).files && $(id).files[0];
@@ -3025,9 +3121,12 @@ function onAction(act, el) {
         const b = t[1].trim() ? L.parseStatement(t[1], o, S.profile.rules, {}) : { rows: [] };
         const box = $('#cmpBox');
         if (a.error || b.error) { box.innerHTML = '<div class="note">' + esc((a.error ? 'ING: ' + a.error : '') + ' ' + (b.error ? 'ABN: ' + b.error : '')) + '</div>'; return; }
+        a.rows.concat(b.rows).forEach(function (r) { r.m = L.applyAlias(r.m, aliasList()); });
         const cmp = L.compareStatements(a.rows, b.rows, allTx().map(function (x) { return { d: x.d, a: x.a }; }));
         cmp.rows.forEach(function (r) { r.inc = r.status === 'new'; });
-        IMP = { text: '', cur: S.profile.currency, opts: { dateFmt: 'auto', sign: 'auto' }, cmp: true, res: { rows: cmp.rows, detected: { dateFmt: 'auto', mode: 'single', sign: 'negspend' }, skipped: 0 }, count: cmp.count };
+        const rec = L.detectRecurring(cmp.rows, S.profile.bills || []);
+        rec.found.forEach(function (f) { f.use = true; });
+        IMP = { text: '', cur: S.profile.currency, opts: { dateFmt: 'auto', sign: 'auto' }, cmp: true, res: { rows: cmp.rows, detected: { dateFmt: 'auto', mode: 'single', sign: 'negspend' }, skipped: 0 }, count: cmp.count, rec: rec };
         renderCmp();
       });
       break;
@@ -3357,6 +3456,7 @@ document.addEventListener('change', function (e) {
   if (bind === 'limit') { const v = parseFloat(el.value); mutate(function () { const b = S.profile.budgets[el.dataset.cat] || {}; b.limit = isNaN(v) || v < 0 ? 0 : v; b.auto = false; S.profile.budgets[el.dataset.cat] = b; markProfile(); }); render(); return; }
   if (bind === 'type') { mutate(function () { const b = S.profile.budgets[el.dataset.cat] || {}; b.type = el.value; S.profile.budgets[el.dataset.cat] = b; markProfile(); }); render(); return; }
   if (bind === 'sav') { const v = parseFloat(el.value); mutate(function () { S.profile.sav = { auto: false, value: isNaN(v) || v < 0 ? 0 : v }; markProfile(); }); render(); return; }
+  if (bind === 'rec-use') { IMP.rec.found[+el.dataset.i].use = el.checked; return; }
   if (bind === 'imp-inc') { IMP.res.rows[+el.dataset.i].inc = el.checked; updateImpCount(); return; }
   if (bind === 'imp-cat') { IMP.res.rows[+el.dataset.i].c = el.value; return; }
 });
