@@ -371,6 +371,8 @@ details.card > summary::after { border-color: var(--muted); }
 .fold-body .card.pad { padding: 0; }
 .fold-body .card.list { margin: 0 -14px; }
 .fold .sec-head { justify-content: flex-end; padding-right: 0; }
+#updbar { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 60; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px 12px 18px; border-radius: 999px; background: rgba(23,26,32,.96); border: 1px solid rgba(94,240,192,.4); box-shadow: 0 0 30px -6px rgba(94,240,192,.5); color: var(--ink); font-size: 15px; }
+#updbar button { border: 0; border-radius: 999px; padding: 10px 16px; font: inherit; font-weight: 600; background: var(--accent); color: var(--accent-ink); }
 
 </style>
 </head>
@@ -383,7 +385,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 08:31';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 08:35'; window.__BID__ = '2026-11-06 08:35:47';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2959,6 +2961,26 @@ boot();
 </script>
 <script>
 if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); }); }
+/* Look for a newer version and offer a one-tap update. Only caches are cleared, never your data. */
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    if (!window.__BID__ || !navigator.onLine) return;
+    fetch('sw.js?cb=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (txt) {
+      const m = txt.match(/build (\S+ \S+)/);
+      if (!m || m[1] === window.__BID__) return;
+      const b = document.createElement('div');
+      b.id = 'updbar';
+      b.innerHTML = '<span>A new version is ready.</span><button id="updgo">Update now</button>';
+      document.body.appendChild(b);
+      document.getElementById('updgo').onclick = function () {
+        this.textContent = 'Updating...';
+        const done = function () { location.reload(); };
+        const clear = function () { return (window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : Promise.resolve()); };
+        (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve()).then(clear).then(done, done);
+      };
+    }).catch(function () {});
+  }, 2500);
+});
 </script>
 </body>
 </html>
