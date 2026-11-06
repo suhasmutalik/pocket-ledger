@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:35'; window.__BID__ = '2026-11-06 09:35:31';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:41'; window.__BID__ = '2026-11-06 09:41:28';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1232,13 +1232,39 @@ function lockedMoney(profile, months, todayStr, M) {
   return { range: r, base: base, left: left, up: up, upTotal: upTotal, free: free, avg: avg, remain: remain, carry: carry, cc: ci.any ? ci.stmt : null };
 }
 
+/* ---------- bank check: how much the ABN account needs for its automatic deductions ---------- */
+function isAbnBill(b) { return b.acct ? b.acct === 'abn' : !(b.cat === 'Bank fees' && /\bING\b/i.test(b.name)); }
+function bankCheck(profile, months, todayStr) {
+  const bank = (profile && profile.bank) || {};
+  const r = periodRange(periodKeyOf(todayStr));
+  const nextEnd = periodRange(addMonths(periodKeyOf(todayStr), 1)).end;
+  const until = bank.until && bank.until > todayStr ? bank.until : nextEnd;
+  const bal = Number(bank.bal) || 0;
+  const occ = calOccurrences(profile, addDays(todayStr, 1), until).filter(function (o) {
+    if (o.posted || !(o.amount > 0)) return false;
+    if (o.kind === 'bill') { const b = ((profile.bills) || []).filter(function (x) { return x.id === o.id; })[0]; return b && isAbnBill(b) && b.cat !== 'Transfer'; }
+    return true;
+  });
+  const bills = Math.round(occ.reduce(function (s, o) { return s + o.amount; }, 0) * 100) / 100;
+  const ci = creditInfo(profile, months, todayStr);
+  const cc = [];
+  if (ci.any) {
+    if (ci.stmt.remaining > 0 && ci.stmt.due <= until) cc.push({ name: 'Credit card statement of ' + dateLabel(ci.stmt.to), due: ci.stmt.due, amount: ci.stmt.remaining });
+    const od = lastOfMonth(Number(ci.open.to.slice(0, 4)), Number(ci.open.to.slice(5, 7)));
+    if (ci.open.total > 0 && od <= until) cc.push({ name: 'Credit card, statement made ' + dateLabel(ci.open.to) + ' (so far)', due: od, amount: ci.open.total });
+  }
+  const ccTotal = Math.round(cc.reduce(function (s, c) { return s + c.amount; }, 0) * 100) / 100;
+  const need = Math.round((bills + ccTotal) * 100) / 100;
+  return { bal: bal, balSet: bank.bal !== undefined && bank.bal !== '', until: until, occ: occ, bills: bills, cc: cc, ccTotal: ccTotal, need: need, move: Math.max(0, Math.round((need - bal) * 100) / 100), spare: Math.max(0, Math.round((bal - need) * 100) / 100) };
+}
+
 const api = {
   FIXED: FIXED, VARIABLE: VARIABLE, SPEND_CATS: SPEND_CATS, ALL_CATS: ALL_CATS, DEFAULT_TYPE: DEFAULT_TYPE,
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
   parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
-  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
+  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else root.LedgerLogic = api;
@@ -1571,6 +1597,7 @@ document.addEventListener('toggle', function (e) {
   const d = e.target;
   if (d && d.classList && d.classList.contains('fold')) foldOpen[d.dataset.fold] = d.open;
   if (d && d.id === 'billdays') foldOpen.__billdays = d.open;
+  if (d && d.id === 'bankchk') foldOpen.__bank = d.open;
 }, true);
 function render() {
   if (!loaded) {
@@ -2743,6 +2770,7 @@ function onAction(act, el) {
         markProfile();
       });
       render(); toast('Added to your savings'); break;
+    case 'bk-until': mutate(function () { S.profile.bank = Object.assign({}, S.profile.bank || {}, { until: el.dataset.d }); markProfile(); }); foldOpen.__bank = true; render(); break;
     case 'bills-fix':
       mutate(function () { (S.profile.bills || []).filter(function (b) { return b.cat !== 'Transfer'; }).forEach(relocateBill); S.profile.billsFixed = true; markProfile(); syncAll(); });
       render(); toast('Bill deductions placed on their dates'); break;
@@ -3037,7 +3065,7 @@ function calendarHTML() {
   return lockCard +
     '<section><div class="card pad stack"><div class="sec-head"><button class="link" data-act="cal-prev">&lsaquo; Back</button><h3 style="margin:0">' + L.monthLabel(mk, true) + '</h3><button class="link" data-act="cal-next">Next &rsaquo;</button></div>' +
     '<div class="cal-g">' + WD.map(function (w) { return '<span class="cal-w">' + w + '</span>'; }).join('') + cells + '</div>' +
-    '<div class="cal-key small muted"><i class="dt b"></i> payment <i class="dt n"></i> note <i class="dt pay"></i> salary <i class="dt cc"></i> credit card</div></div></section>' + sel + '<section>' + billDaysHTML() + '</section>';
+    '<div class="cal-key small muted"><i class="dt b"></i> payment <i class="dt n"></i> note <i class="dt pay"></i> salary <i class="dt cc"></i> credit card</div></div></section>' + sel + bankHTML() + '<section>' + billDaysHTML() + '</section>';
 }
 function billMonths() {
   const r = L.periodRange(L.periodKeyOf(L.today()));
@@ -3067,12 +3095,31 @@ function setBillDay(id, day) {
     markProfile(); syncAll();
   });
 }
+function bankHTML() {
+  if (demo) return '';
+  const B = L.bankCheck(S.profile, S.months, L.today());
+  const bank = S.profile.bank || {};
+  const rows = B.occ.slice(0, 40).map(function (o) { return '<div class="kv"><span>' + esc(o.name) + ' <span class="muted small">' + L.dateLabel(o.d) + '</span></span><span class="mono">' + money(o.amount) + '</span></div>'; }).join('');
+  return '<section><details class="card" id="bankchk"' + (foldOpen.__bank ? ' open' : '') + '><summary>Bank check (ABN AMRO)</summary><div class="body stack">' +
+    '<div class="grid2"><label>Balance now<input id="bk-bal" type="number" inputmode="decimal" step="0.01" value="' + (bank.bal !== undefined && bank.bal !== '' ? bank.bal : '') + '" placeholder="0.00"></label>' +
+    '<label>Cover until<input id="bk-until" type="date" value="' + B.until + '"></label></div>' +
+    '<div class="btns"><button class="btn sm ghost" data-act="bk-until" data-d="' + L.periodRange(L.periodKeyOf(L.today())).end + '">Until next salary</button><button class="btn sm ghost" data-act="bk-until" data-d="' + L.periodRange(L.addMonths(L.periodKeyOf(L.today()), 1)).end + '">Next full month</button></div>' +
+    (B.balSet ? '<div class="ringbox" style="width:min(60vw,220px)">' + ringSVG(B.need > 0 ? Math.min(1, B.bal / B.need) : 1, B.move > 0 ? 'bad' : 'good') +
+      '<div class="ringc"><div class="ringlab">' + (B.move > 0 ? 'Move to ABN' : 'Enough, spare') + '</div><div class="ringnum mono">' + money(B.move > 0 ? B.move : B.spare) + '</div></div></div>' : '<p class="small muted">Type what is in the account now to see how much to move.</p>') +
+    '<div class="list inner" style="margin:0 -16px">' +
+    '<div class="kv"><span>Balance</span><span class="mono">' + money(B.bal) + '</span></div>' +
+    '<div class="kv"><span>Bills from ABN until ' + L.dateLabel(B.until) + ' (' + B.occ.length + ')</span><span class="mono">' + money(B.bills) + '</span></div>' +
+    B.cc.map(function (c) { return '<div class="kv"><span>' + esc(c.name) + '<br><span class="muted small">Due ' + L.dateLabel(c.due) + '</span></span><span class="mono">' + money(c.amount) + '</span></div>'; }).join('') +
+    '<div class="kv"><span><b>Total the account needs</b></span><span class="mono"><b>' + money(B.need) + '</b></span></div></div>' +
+    '<details><summary class="small muted" style="cursor:pointer">Which payments are included</summary><div class="list" style="margin-top:6px">' + (rows || '<div class="empty">None.</div>') + '</div></details>' +
+    '<p class="small muted">Only bills marked from ABN count. Mark each bill under Set the day each bill is taken. The credit card line grows as you tap until the statement is made.</p></div></details></section>';
+}
 function billDaysHTML() {
   const bills = (S.profile.bills || []).filter(function (b) { return b.cat !== 'Transfer'; });
   if (!bills.length) return '';
   return '<details class="card" id="billdays"' + (foldOpen.__billdays ? ' open' : '') + '><summary>Set the day each bill is taken</summary><div class="body"><p class="small muted">Your bills from Budget are listed here. Type the day of the month each one is taken and the calendar updates. Nothing needs to be typed again.</p>' +
     bills.map(function (b) {
-      return '<div class="brow"><div class="nm">' + esc(b.name) + '<br><span class="muted small">' + money(b.amount) + ' &middot; ' + esc(b.cat) + '</span></div><div class="ctl"><input type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></div></div>';
+      return '<div class="brow"><div class="nm">' + esc(b.name) + '<br><span class="muted small">' + money(b.amount) + ' &middot; ' + esc(b.cat) + '</span></div><div class="ctl"><input type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"><label class="small" style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" data-bind="billacct" data-id="' + esc(b.id) + '"' + (L.isAbnBill(b) ? ' checked' : '') + '> from ABN</label></div></div>';
     }).join('') + '</div></details>';
 }
 function calAddSheet(d) {
@@ -3164,6 +3211,18 @@ document.addEventListener('change', function (e) {
   if (id === 'income') { const v = parseFloat(el.value); mutate(function () { S.profile.income = isNaN(v) || v < 0 ? 0 : v; markProfile(); }); render(); return; }
   if (id === 'fxcur') { mutate(function () { S.profile.fx = el.value ? { cur: el.value, rate: (S.profile.fx && S.profile.fx.rate) || 0 } : null; markProfile(); }); render(); return; }
   if (id === 'fxrate') { const v = parseFloat(el.value); mutate(function () { if (S.profile.fx) { S.profile.fx.rate = isNaN(v) || v < 0 ? 0 : v; markProfile(); } }); render(); return; }
+  if (bind === 'billacct') {
+    mutate(function () { const b = (S.profile.bills || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (b) { b.acct = el.checked ? 'abn' : 'other'; markProfile(); } });
+    render(); return;
+  }
+  if (id === 'bk-bal' || id === 'bk-until') {
+    mutate(function () {
+      const k = S.profile.bank = Object.assign({}, S.profile.bank || {});
+      if (id === 'bk-bal') { const v = parseFloat(el.value); if (isNaN(v)) delete k.bal; else { k.bal = v; k.balDate = L.today(); } } else k.until = el.value;
+      markProfile();
+    });
+    foldOpen.__bank = true; render(); return;
+  }
   if (bind === 'billday') {
     const v = Math.round(parseFloat(el.value));
     if (isNaN(v) || v < 1 || v > 31) { toast('Pick a day from 1 to 31'); render(); return; }
