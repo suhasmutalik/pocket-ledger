@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 13:01'; window.__BID__ = '2026-11-06 13:01:15';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 13:06'; window.__BID__ = '2026-11-06 13:06:46';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -804,6 +804,7 @@ function parseTapLoose(h) {
 function parseTapHash(hash) {
   let h = String(hash || '');
   try { h = decodeURIComponent(h); } catch (e) { /* keep raw */ }
+  h = h.replace(/^(#?tap-)\s+/i, '$1').replace(/^(#?tap-\d+)\s*-\s*/i, '$1-');
   const sc = splitCard(h);
   h = sc.h;
   const res = parseTapCore(h);
