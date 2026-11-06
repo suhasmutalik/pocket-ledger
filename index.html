@@ -383,7 +383,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 00:01';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 08:31';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1130,13 +1130,29 @@ function tripSummary(months, trip, todayStr) {
   return { days: days, spent: spent, spentHome: spentHome, count: count, byCat: byCat, received: received, left: received - spent, perDay: spent / days, end: end };
 }
 
+function tripAllowance(trip, todayStr) {
+  if (!trip || trip.kind === 'personal' || !(trip.alAmt > 0)) return null;
+  const T = tripSummary({}, trip, todayStr);
+  const minDays = trip.alAfter >= 0 && trip.alAfter !== '' && trip.alAfter != null ? Number(trip.alAfter) : 28;
+  const qualifies = T.days >= minDays;
+  const gross = T.days / 7 * trip.alAmt;
+  const fromTrip = trip.alCur && trip.alCur === trip.cur && trip.rate > 0;
+  const toHome = function (v) { return fromTrip ? v * trip.rate : v; };
+  const tax = Math.min(100, Math.max(0, Number(trip.alTax) || 0));
+  const r2 = function (v) { return Math.round(v * 100) / 100; };
+  const grossHome = toHome(gross), netHome = grossHome * (1 - tax / 100);
+  return { days: T.days, minDays: minDays, qualifies: qualifies, tax: tax,
+    grossHome: qualifies ? r2(grossHome) : 0, netHome: qualifies ? r2(netHome) : 0, taxHome: qualifies ? r2(grossHome - netHome) : 0,
+    ifGrossHome: r2(grossHome), ifNetHome: r2(netHome) };
+}
+
 const api = {
   FIXED: FIXED, VARIABLE: VARIABLE, SPEND_CATS: SPEND_CATS, ALL_CATS: ALL_CATS, DEFAULT_TYPE: DEFAULT_TYPE,
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
   parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
-  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
+  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else root.LedgerLogic = api;
@@ -1911,7 +1927,7 @@ function ringSVG(frac, kind, mark) {
     '<circle class="ring-track" cx="100" cy="100" r="' + R + '"/>' +
     (f > 0 ? '<circle class="ring-fill" cx="100" cy="100" r="' + R + '" stroke="url(#' + id + ')" stroke-dasharray="' + (C * f).toFixed(1) + ' ' + C.toFixed(1) + '" transform="rotate(-90 100 100)"/>' : '') + tick + '</svg>';
 }
-var INCOME_TYPES = [['base', 'Base salary'], ['overtime', 'Overtime'], ['bonus', 'Bonus'], ['other', 'Other extra']];
+var INCOME_TYPES = [['base', 'Base salary'], ['overtime', 'Overtime'], ['bonus', 'Bonus'], ['allowance', 'Assignment allowance'], ['other', 'Other extra']];
 function incomeTypeOptions(sel) { return INCOME_TYPES.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === sel ? ' selected' : '') + '>' + x[1] + '</option>'; }).join(''); }
 function incomeTypeName(k) { const f = INCOME_TYPES.filter(function (x) { return x[0] === k; })[0]; return f ? f[1] : ''; }
 function extraHTML(M) {
@@ -1946,6 +1962,14 @@ function creditHTML() {
   return '<section><h2>Credit card</h2><div class="card pad stack">' + body +
     '<div class="row"><span>This statement so far (' + lab(C.open.from) + ' to ' + lab(C.open.to) + ')</span><span class="mono"><b>' + money(C.open.total) + '</b></span></div>' +
     '<div class="small muted">' + C.open.count + (C.open.count === 1 ? ' payment' : ' payments') + '. The statement is made on day ' + C.billDay + ' and paid by the end of that month.</div></div></section>';
+}
+function alSheet(id) {
+  const t = (S.profile.trips || []).filter(function (x) { return x.id === id; })[0];
+  const A = t && L.tripAllowance(t, L.today());
+  if (!A) return;
+  openSheet('<h3>Allowance received</h3><div class="stack"><p class="small muted">' + esc(t.name) + '. Estimate: ' + money(A.grossHome) + ' before tax' + (A.tax > 0 ? ', ' + money(A.netHome) + ' after ' + A.tax + '% tax' : '') + '. Type the amount that actually reached your bank.</p>' +
+    '<div class="grid2"><label>Amount received (' + S.profile.currency + ')<input id="al-amt" type="number" inputmode="decimal" step="0.01" min="0" value="' + A.netHome.toFixed(2) + '"></label><label>Date<input id="al-date" type="date" value="' + L.today() + '"></label></div>' +
+    '<div class="btns"><button class="btn" data-act="al-save" data-id="' + esc(id) + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
 }
 function ccPaySheet() {
   const C = L.creditInfo(S.profile, S.months, L.today());
@@ -2042,6 +2066,12 @@ function tripsHTML() {
           (moveLeft > 0.5 ? '<button class="btn sm ghost" data-act="move-left" data-id="' + esc(t.id) + '">Move ' + money(moveLeft) + ' left to savings</button>' : '') +
           ((t.moved || 0) > 0 ? '<span class="small muted">' + money(t.moved) + ' moved to savings</span>' : '') + '</div>';
       })() : '') +
+      (function () {
+        const A = L.tripAllowance(t, L.today());
+        if (!A) return '';
+        return '<div class="note"><b>Assignment allowance</b><br>It builds up from day 1 at ' + money(t.alAmt) + ' a week, but is only paid if the trip lasts ' + A.minDays + ' days. ' + (A.qualifies ? 'You have passed that: ' + A.days + ' days so far, about ' + money(A.grossHome) + ' before tax' + (A.tax > 0 ? ', about ' + money(A.netHome) + ' after ' + A.tax + '% tax' : '') + '. Paid as one amount after the trip.' : 'Day ' + A.days + ' of ' + A.minDays + ' so far. If you complete it, about ' + money(A.ifGrossHome) + ' before tax would be paid for ' + A.days + ' days.') + '</div>' +
+          '<div class="btns" style="align-items:center">' + (t.alPaid ? '<span class="pill good">Allowance received ' + L.dateLabel(t.alPaid) + ' (' + money(t.alAmount) + ')</span><button class="btn sm ghost" data-act="al-undo" data-id="' + esc(t.id) + '">Undo</button>' : (A.qualifies ? '<button class="btn sm" data-act="al-open" data-id="' + esc(t.id) + '">Allowance received</button>' : '')) + '</div>';
+      })() +
       '</div>' +
       (cats.length ? '<div class="list" style="border-top:1px solid var(--line)">' + cats.map(function (c) { return '<div class="cat"><div class="top-row"><span>' + esc(c) + '</span><span class="mono"><b>' + moneyIn(T.byCat[c], t.cur) + '</b></span></div>' + bar(pct(T.byCat[c], T.spent), 'var') + '</div>'; }).join('') + '</div>' : '') +
       (txs.length ? '<details style="border-top:1px solid var(--line)"><summary class="pad" style="cursor:pointer;font-weight:600;font-size:14px">Entries (' + txs.length + ')</summary><div class="list">' + txs.slice(0, 60).map(txRow).join('') + '</div></details>' : '') +
@@ -2077,6 +2107,10 @@ function expectedItems() {
     const m = tripMoney(t);
     if (m.pay > 0) rows.push({ kind: 'perdiem', id: t.id, name: 'Per diem: ' + t.name, who: t.end ? 'Employer' : 'Employer, so far', amount: Math.round(m.pay * 100) / 100 });
   });
+  (S.profile.trips || []).forEach(function (t) {
+    const A = L.tripAllowance(t, L.today());
+    if (A && !t.alPaid && A.netHome > 0) rows.push({ kind: 'allow', id: t.id, name: 'Allowance: ' + t.name, who: t.end ? 'Employer, after tax' : 'Employer, so far, after tax', amount: A.netHome });
+  });
   return { rows: rows, total: rows.reduce(function (s, r) { return s + r.amount; }, 0) };
 }
 function savingsHTML() {
@@ -2099,7 +2133,7 @@ function savingsHTML() {
     (gs.length ? '<div class="card list">' + gs.map(potCard).join('') + '</div>' : '<div class="card empty">No savings yet. Tap New pot to start one.</div>') + '</section>' +
     '<section><div class="sec-head"><h2>Money you are expecting</h2><button class="link" data-act="new-owed">Add</button></div>' +
     '<div class="card list">' + (exp.rows.length ? exp.rows.map(function (r) {
-      return '<div class="tx"><span class="tx-main"><span class="tx-m">' + esc(r.name) + '</span><span class="tx-sub">' + esc(r.who || '') + (r.pot ? ' &middot; into ' + esc(potName(r.pot)) : '') + '</span></span><span style="display:flex;gap:10px;align-items:center"><span class="amt mono pos">+' + money(r.amount, true) + '</span><button class="btn sm ghost" data-act="' + (r.kind === 'owed' ? 'owed-got' : 'pd-got') + '" data-id="' + esc(r.id) + '">Received</button></span></div>';
+      return '<div class="tx"><span class="tx-main"><span class="tx-m">' + esc(r.name) + '</span><span class="tx-sub">' + esc(r.who || '') + (r.pot ? ' &middot; into ' + esc(potName(r.pot)) : '') + '</span></span><span style="display:flex;gap:10px;align-items:center"><span class="amt mono pos">+' + money(r.amount, true) + '</span><button class="btn sm ghost" data-act="' + (r.kind === 'owed' ? 'owed-got' : r.kind === 'allow' ? 'al-open' : 'pd-got') + '" data-id="' + esc(r.id) + '">Received</button></span></div>';
     }).join('') : '<div class="empty">Nothing expected. Add money someone owes you, like a returned advance.</div>') + '</div>' +
     (got.length ? '<p class="small muted" style="margin-top:8px">Received recently: ' + got.map(function (o) { return esc(o.name) + ' ' + money(o.amount); }).join(', ') + '</p>' : '') + '</section>' +
     '<section><p class="muted small">Expected money is not counted in your spending or your savings until you tap Received. Per diem comes from your trips.</p></section>';
@@ -2293,8 +2327,12 @@ function tripSheet(id) {
     '<div class="grid2"><label>Trip currency<select id="t-c">' + curs.map(function (c) { return '<option' + (c === (t ? t.cur : fxc || S.profile.currency) ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label>' +
     '<label>1 unit in ' + S.profile.currency + '<input id="t-r" type="number" inputmode="decimal" step="0.0001" min="0" value="' + (t ? (t.rate || '') : (S.profile.fx && S.profile.fx.rate || '')) + '"></label></div>' +
     '<div class="grid2"><label>First day<input id="t-s" type="date" value="' + (t ? t.start : L.today()) + '"></label><label>Last day<input id="t-e" type="date" value="' + (t && t.end ? t.end : '') + '"></label></div>' +
-    '<div id="t-biz" class="grid2"' + (personal ? ' hidden' : '') + '><label>Per diem each day<input id="t-p" type="number" inputmode="decimal" step="0.01" min="0" value="' + (t ? (t.perDiem || '') : '') + '"></label>' +
+    '<div id="t-biz"' + (personal ? ' hidden' : '') + '><div class="grid2"><label>Per diem each day<input id="t-p" type="number" inputmode="decimal" step="0.01" min="0" value="' + (t ? (t.perDiem || '') : '') + '"></label>' +
     '<label>Per diem paid in<select id="t-pc"><option value="trip"' + (!t || !t.pdCur || t.pdCur === t.cur ? ' selected' : '') + '>Trip currency</option><option value="home"' + (t && t.pdCur && t.pdCur !== t.cur ? ' selected' : '') + '>' + S.profile.currency + '</option></select></label></div>' +
+    '<div class="grid2" style="margin-top:12px"><label>Assignment allowance per week<input id="t-al" type="number" inputmode="decimal" step="0.01" min="0" value="' + (t && t.alAmt ? t.alAmt : '') + '"></label>' +
+    '<label>Allowance paid in<select id="t-alc"><option value="home"' + (!t || t.alCur !== t.cur || t.alCur === S.profile.currency ? ' selected' : '') + '>' + S.profile.currency + '</option><option value="trip"' + (t && t.alCur && t.alCur === t.cur && t.cur !== S.profile.currency ? ' selected' : '') + '>Trip currency</option></select></label></div>' +
+    '<div class="grid2"><label>Paid only if trip lasts (days)<input id="t-ala" type="number" inputmode="numeric" min="0" value="' + (t && t.alAfter != null ? t.alAfter : 28) + '"></label>' +
+    '<label>Tax kept back %<input id="t-alt" type="number" inputmode="decimal" min="0" max="100" value="' + (t && t.alTax ? t.alTax : '') + '" placeholder="0"></label></div></div>' +
     '<div id="t-per"' + (personal ? '' : ' hidden') + '><label>Trip budget (optional, trip currency)<input id="t-b" type="number" inputmode="decimal" step="1" min="0" value="' + (t && t.budget ? t.budget : '') + '"></label></div>' +
     '<p class="small muted">Everything you spend between the first and last day goes into this trip automatically. Leave the last day empty while you are still away.</p>' +
     '<div class="btns"><button class="btn" data-act="save-trip" data-id="' + esc(id || '') + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (t ? '<button class="btn danger" data-act="del-trip" data-id="' + esc(id) + '">Delete</button>' : '') + '</div></div>');
@@ -2526,6 +2564,7 @@ function onAction(act, el) {
         let t = trips.filter(function (x) { return x.id === el.dataset.id; })[0];
         if (!t) { t = { id: L.uid(), cur: cur }; trips.push(t); }
         t.cur = cur; t.kind = kind; t.pdCur = val('t-pc') === 'home' ? S.profile.currency : cur;
+        t.alAmt = kind === 'personal' ? 0 : (numval('t-al') || 0); t.alCur = val('t-alc') === 'trip' ? cur : S.profile.currency; t.alAfter = numval('t-ala'); if (isNaN(t.alAfter)) t.alAfter = 28; t.alTax = numval('t-alt') || 0;
         t.name = name; t.start = s0; t.end = e0 || null; t.perDiem = kind === 'personal' ? 0 : pd; t.budget = kind === 'personal' ? (numval('t-b') || 0) : 0; t.rate = rate;
         markProfile(); syncAll();
       });
@@ -2615,6 +2654,31 @@ function onAction(act, el) {
         markProfile();
       });
       render(); toast('Added to your savings'); break;
+    case 'al-open': alSheet(el.dataset.id); break;
+    case 'al-save': {
+      const v = numval('al-amt'), d = val('al-date') || L.today();
+      if (isNaN(v) || v <= 0) { toast('Enter the amount received'); break; }
+      mutate(function () {
+        const t = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+        if (!t || t.alPaid) return;
+        t.alPaid = d; t.alAmount = Math.round(v * 100) / 100;
+        addTx({ id: L.uid(), d: d, m: 'Allowance: ' + t.name, a: -t.alAmount, c: 'Income', it: 'allowance', src: 'alw', alt: t.id });
+        markProfile();
+      });
+      closeSheet(); render(); toast('Allowance recorded as extra income'); break;
+    }
+    case 'al-undo':
+      if (el.dataset.armed !== '1') { el.dataset.armed = '1'; el.textContent = 'Tap again to undo'; break; }
+      mutate(function () {
+        const t = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+        if (!t) return;
+        Object.keys(S.months).forEach(function (k) {
+          const arr = S.months[k];
+          for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].src === 'alw' && arr[i].alt === t.id) { arr.splice(i, 1); markMonth(k); } }
+        });
+        t.alPaid = ''; t.alAmount = 0; markProfile();
+      });
+      render(); toast('Allowance is expected again'); break;
     case 'pd-got':
       mutate(function () {
         const t = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0];
