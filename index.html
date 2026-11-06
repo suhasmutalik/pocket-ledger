@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:18'; window.__BID__ = '2026-11-06 09:18:25';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:26'; window.__BID__ = '2026-11-06 09:26:47';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2096,6 +2096,7 @@ function billsHTML() {
   const bills = S.profile.bills || [];
   const total = bills.reduce(function (s, b) { return s + b.amount; }, 0);
   return '<section><div class="sec-head"><h2>Monthly bills</h2><button class="link" data-act="new-bill">Add bill</button></div>' +
+    '<div class="note" style="margin-bottom:10px">Amount left looks wrong after changing days? <button class="link" data-act="bills-fix">Re-place all bill deductions</button></div>' +
     '<div class="card list">' + (bills.length ? bills.map(function (b) {
       return '<div class="brow"><div class="nm">' + esc(b.name) + '</div><div class="ctl"><input type="number" inputmode="decimal" step="0.01" min="0" data-bind="bill" data-id="' + esc(b.id) + '" value="' + b.amount + '" aria-label="' + esc(b.name) + ' amount"></div>' +
         '<div class="meta"><span>' + (b.cat === 'Transfer' ? 'Card payment, not counted' : esc(b.cat)) + ' &middot; day <input class="dayin" type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></span><button class="mini" data-act="del-bill" data-id="' + esc(b.id) + '">Remove</button></div></div>';
@@ -2717,6 +2718,9 @@ function onAction(act, el) {
         markProfile();
       });
       render(); toast('Added to your savings'); break;
+    case 'bills-fix':
+      mutate(function () { (S.profile.bills || []).filter(function (b) { return b.cat !== 'Transfer'; }).forEach(relocateBill); S.profile.billsFixed = true; markProfile(); syncAll(); });
+      render(); toast('Bill deductions placed on their dates'); break;
     case 'cal-prev': calM = L.addMonths(calM || CAL_KEY, -1); calSel = ''; render(); break;
     case 'cal-next': calM = L.addMonths(calM || CAL_KEY, 1); calSel = ''; render(); break;
     case 'cal-day': calSel = calSel === el.dataset.d ? '' : el.dataset.d; render(); break;
