@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:26'; window.__BID__ = '2026-11-06 09:26:47';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:35'; window.__BID__ = '2026-11-06 09:35:31';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -557,7 +557,9 @@ function validYMD(y, m, d) {
 
 function parseDate(str, fmt) {
   const s = String(str || '').trim();
-  let m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+  let m = s.match(/^(\d{4})(\d{2})(\d{2})(?:\D|$)/);
+  if (m) return validYMD(+m[1], +m[2], +m[3]);
+  m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
   if (m) return validYMD(+m[1], +m[2], +m[3]);
   m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
   if (m) {
@@ -594,6 +596,19 @@ function detectDateFmt(cells) {
 
 function txKey(t) { return t.d + '|' + Number(t.a).toFixed(2) + '|' + norm(t.m).trim().slice(0, 12); }
 
+
+/* Dutch bank descriptions (ABN AMRO and ING) into a short merchant name */
+function cleanBankDesc(raw) {
+  let s = String(raw || '').replace(/\s+/g, ' ').trim();
+  let m = s.match(/\/NAME\/([^\/]+)/);
+  if (m) return m[1].trim();
+  m = s.match(/(?:Naam|Name):\s*(.+?)\s+(?:Machtiging|Omschrijving|IBAN|Kenmerk|Incassant|Doorlopende|Betalingskenmerk|Description|Reference)/i);
+  if (m) return m[1].trim();
+  m = s.match(/^(?:BEA|GEA)\s+(?:NR:\S+\s+)?\d\d\.\d\d\.\d\d\/\d\d\.\d\d\s+(.+?)(?:,\s*PAS\s*\d+|\s+NR:|$)/i);
+  if (m) return m[1].trim();
+  m = s.match(/^(?:Apple Pay|Betaalautomaat)\s*(.*)/i);
+  return s;
+}
 function parseStatement(text, opts, rules, existing) {
   opts = opts || {};
   existing = existing || {};
@@ -603,7 +618,15 @@ function parseStatement(text, opts, rules, existing) {
     const cells = all[i].map(function (c) { return String(c).toLowerCase(); });
     const hasDate = cells.some(function (c) { return /date|posted/.test(c); });
     const hasAmt = cells.some(function (c) { return /amount|debit|credit|withdraw|deposit|value|paid/.test(c); });
-    if (hasDate && hasAmt) { h = i; break; }
+    const nlDate = cells.some(function (c) { return /^datum|transactiedatum/.test(c.trim()); });
+    const nlAmt = cells.some(function (c) { return /bedrag/.test(c); });
+    if ((hasDate || nlDate) && (hasAmt || nlAmt)) { h = i; break; }
+  }
+  let abn = false;
+  if (h < 0 && all.length && all.every(function (r) { return r.length >= 7 && /^\d{8}$/.test(String(r[2]).trim()) && !isNaN(parseMoney(r[6])); })) {
+    abn = true;
+    all.unshift(['account', 'currency', 'date', 'begin', 'end', 'rente', 'amount', 'description']);
+    h = 0;
   }
   if (h < 0) return { error: 'Could not find Date and Amount columns. The first row of the file should name them.' };
   const head = all[h].map(function (c) { return String(c).toLowerCase().trim(); });
@@ -612,10 +635,11 @@ function parseStatement(text, opts, rules, existing) {
     for (let i = 0; i < head.length; i++) { if (re.test(head[i]) && (not === undefined || i !== not)) return i; }
     return -1;
   }
-  let dateCol = find(/trans.*date|post.*date|^date/);
-  if (dateCol < 0) dateCol = find(/date|posted/);
-  const descCol = find(/descr|merchant|payee|memo|narrat|detail|name|particulars|reference/, dateCol);
-  let amtCol = find(/^amount|amt|^value|^sum/);
+  let dateCol = find(/trans.*date|transactiedatum|post.*date|^date|^datum/);
+  if (dateCol < 0) dateCol = find(/date|datum|posted/);
+  const descCol = find(/descr|omschrijving|merchant|payee|memo|narrat|detail|name|naam|particulars|reference/, dateCol);
+  const abCol = find(/^af bij|^af\/bij/);
+  let amtCol = find(/^amount|amt|^value|^sum|^bedrag/);
   const debCol = find(/debit|withdraw|paid out|money out|outflow|spent/);
   const credCol = find(/credit|deposit|paid in|money in|inflow|received/);
   let mode = 'single';
@@ -641,18 +665,19 @@ function parseStatement(text, opts, rules, existing) {
       const cr = parseMoney(r[credCol]);
       a = (isNaN(de) ? 0 : Math.abs(de)) - (isNaN(cr) ? 0 : Math.abs(cr));
     } else {
-      const v = parseMoney(r[amtCol]);
-      a = isNaN(v) ? NaN : (sign === 'negspend' ? -v : v);
+      let v = parseMoney(r[amtCol]);
+      if (abCol >= 0 && !isNaN(v)) { v = Math.abs(v); a = /^bij/i.test(String(r[abCol]).trim()) ? -v : v; }
+      else a = isNaN(v) ? NaN : (sign === 'negspend' ? -v : v);
     }
     if (!d || isNaN(a) || a === 0) { skipped++; return; }
     const raw = descCol >= 0 ? String(r[descCol] || '') : '';
-    const m = cleanMerchant(raw);
+    const m = cleanMerchant(cleanBankDesc(raw));
     let c = categorize(raw + ' ' + m, rules);
     if (a < 0 && c === 'Other') c = 'Income';
     if (a > 0 && c === 'Income') c = 'Other';
     a = Math.round(a * 100) / 100;
     const t = { d: d, m: m, a: a, c: c };
-    t.dup = !!existing[txKey(t)];
+    t.dup = !!(existing[txKey(t)] || existing['da|' + t.d + '|' + Number(t.a).toFixed(2)]);
     out.push(t);
   });
   return { rows: out, skipped: skipped, detected: { dateFmt: dfmt, sign: mode === 'single' ? sign : 'split', mode: mode } };
@@ -2321,7 +2346,7 @@ function addHTML() {
 /* ---------- import preview ---------- */
 function existingKeys() {
   const ex = {};
-  allTx().forEach(function (t) { ex[L.txKey(t)] = true; });
+  allTx().forEach(function (t) { ex[L.txKey(t)] = true; ex['da|' + t.d + '|' + Number(t.a).toFixed(2)] = true; });
   return ex;
 }
 function runParse() {
