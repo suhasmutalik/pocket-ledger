@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 08:57'; window.__BID__ = '2026-11-06 08:57:10';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:02'; window.__BID__ = '2026-11-06 09:02:46';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2098,7 +2098,7 @@ function billsHTML() {
   return '<section><div class="sec-head"><h2>Monthly bills</h2><button class="link" data-act="new-bill">Add bill</button></div>' +
     '<div class="card list">' + (bills.length ? bills.map(function (b) {
       return '<div class="brow"><div class="nm">' + esc(b.name) + '</div><div class="ctl"><input type="number" inputmode="decimal" step="0.01" min="0" data-bind="bill" data-id="' + esc(b.id) + '" value="' + b.amount + '" aria-label="' + esc(b.name) + ' amount"></div>' +
-        '<div class="meta"><span>' + (b.cat === 'Transfer' ? 'Card payment, not counted' : esc(b.cat)) + ' &middot; day <input class="dayin" type="number" inputmode="numeric" min="1" max="28" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></span><button class="mini" data-act="del-bill" data-id="' + esc(b.id) + '">Remove</button></div></div>';
+        '<div class="meta"><span>' + (b.cat === 'Transfer' ? 'Card payment, not counted' : esc(b.cat)) + ' &middot; day <input class="dayin" type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></span><button class="mini" data-act="del-bill" data-id="' + esc(b.id) + '">Remove</button></div></div>';
     }).join('') + '<div class="brow"><div class="nm">Total each month</div><div class="mono" style="text-align:right">' + money(total, true) + '</div></div>' : '<div class="empty">No bills yet. Add rent, insurance and subscriptions and they count toward your budget automatically each month.</div>') + '</div></section>' +
     '<section><div class="sec-head"><h2>Your categories</h2><button class="link" data-act="new-cat">Add category</button></div><div class="card attn">' +
     ((S.profile.cats || []).length ? S.profile.cats.map(function (c) { return '<span class="pill">' + esc(c.name) + ' &middot; ' + (c.type === 'fixed' ? 'fixed' : 'variable') + '</span>'; }).join('') : '<span class="muted small">Built-in categories only.</span>') + '</div></section>';
@@ -2402,7 +2402,7 @@ function tripSheet(id) {
 }
 function billSheet() {
   openSheet('<h3>Add a monthly bill</h3><div class="stack"><label>Name<input id="b-n" type="text" placeholder="Gym"></label>' +
-    '<div class="grid2"><label>Amount<input id="b-a" type="number" inputmode="decimal" step="0.01" min="0"></label><label>Day of month<input id="b-d" type="number" min="1" max="28" value="1"></label></div>' +
+    '<div class="grid2"><label>Amount<input id="b-a" type="number" inputmode="decimal" step="0.01" min="0"></label><label>Day of month<input id="b-d" type="number" min="1" max="31" value="1"></label></div>' +
     '<label>Category<select id="b-c">' + catOptions('Subscriptions', false) + '<option value="Transfer">Card payment (not counted as spending)</option></select></label>' +
     '<div class="btns"><button class="btn" data-act="save-bill">Add</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
 }
@@ -2643,7 +2643,7 @@ function onAction(act, el) {
       closeSheet(); render(); toast('Trip deleted. Its entries count in your monthly budget again.'); break;
     case 'new-bill': billSheet(); break;
     case 'save-bill': {
-      const name = val('b-n').trim(), amt = numval('b-a'), cat = val('b-c'), day = Math.max(1, Math.min(28, parseInt(val('b-d'), 10) || 1));
+      const name = val('b-n').trim(), amt = numval('b-a'), cat = val('b-c'), day = Math.max(1, Math.min(31, parseInt(val('b-d'), 10) || 1));
       if (!name || isNaN(amt) || amt <= 0) { toast('Give the bill a name and an amount'); break; }
       mutate(function () { (S.profile.bills = S.profile.bills || []).push({ id: L.uid(), name: name, cat: cat, amount: amt, day: day }); markProfile(); ensureBills(); });
       closeSheet(); render(); toast('Bill added'); break;
@@ -2726,7 +2726,7 @@ function onAction(act, el) {
       const n = val('ca-n').trim(), amt = numval('ca-a'), d = val('ca-d'), c = val('ca-c'), r = val('ca-r');
       if (!n || isNaN(amt) || amt <= 0 || !d) { toast('Enter a name, an amount and a date'); break; }
       mutate(function () {
-        if (r === 'month') (S.profile.bills = S.profile.bills || []).push({ id: L.uid(), name: n, cat: c, amount: amt, day: Math.min(28, Number(d.slice(8))) });
+        if (r === 'month') (S.profile.bills = S.profile.bills || []).push({ id: L.uid(), name: n, cat: c, amount: amt, day: Number(d.slice(8)) });
         else (S.profile.events = S.profile.events || []).push({ id: L.uid(), name: n, cat: c, amount: amt, date: d, repeat: r === 'year' ? 'yearly' : 'once', created: L.today() });
         markProfile(); ensureBills(); ensureEvents(); syncAll();
       });
@@ -3026,7 +3026,7 @@ function billDaysHTML() {
   if (!bills.length) return '';
   return '<details class="card" id="billdays"' + (foldOpen.__billdays ? ' open' : '') + '><summary>Set the day each bill is taken</summary><div class="body"><p class="small muted">Your bills from Budget are listed here. Type the day of the month each one is taken and the calendar updates. Nothing needs to be typed again.</p>' +
     bills.map(function (b) {
-      return '<div class="brow"><div class="nm">' + esc(b.name) + '<br><span class="muted small">' + money(b.amount) + ' &middot; ' + esc(b.cat) + '</span></div><div class="ctl"><input type="number" inputmode="numeric" min="1" max="28" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></div></div>';
+      return '<div class="brow"><div class="nm">' + esc(b.name) + '<br><span class="muted small">' + money(b.amount) + ' &middot; ' + esc(b.cat) + '</span></div><div class="ctl"><input type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></div></div>';
     }).join('') + '</div></details>';
 }
 function calAddSheet(d) {
@@ -3069,8 +3069,9 @@ function ensureBills() {
   let changed = false;
   bills.forEach(function (b) {
     const pk = CAL_KEY + '|' + b.id;
-    if (b.day <= todayDay && p.posted.indexOf(pk) === -1) {
-      (S.months[CAL_KEY] = S.months[CAL_KEY] || []).push({ id: L.uid(), d: CAL_KEY + '-' + String(b.day).padStart(2, '0'), m: b.name, a: b.amount, c: b.cat, src: 'bill', bid: b.id });
+    const effDay = Math.min(b.day, L.daysInMonth(CAL_KEY));
+    if (effDay <= todayDay && p.posted.indexOf(pk) === -1) {
+      (S.months[CAL_KEY] = S.months[CAL_KEY] || []).push({ id: L.uid(), d: CAL_KEY + '-' + String(effDay).padStart(2, '0'), m: b.name, a: b.amount, c: b.cat, src: 'bill', bid: b.id });
       p.posted.push(pk); changed = true;
     }
   });
@@ -3111,7 +3112,7 @@ document.addEventListener('change', function (e) {
   if (id === 'fxrate') { const v = parseFloat(el.value); mutate(function () { if (S.profile.fx) { S.profile.fx.rate = isNaN(v) || v < 0 ? 0 : v; markProfile(); } }); render(); return; }
   if (bind === 'billday') {
     const v = Math.round(parseFloat(el.value));
-    if (isNaN(v) || v < 1 || v > 28) { toast('Pick a day from 1 to 28'); render(); return; }
+    if (isNaN(v) || v < 1 || v > 31) { toast('Pick a day from 1 to 31'); render(); return; }
     setBillDay(el.dataset.id, v);
     render(); return;
   }
