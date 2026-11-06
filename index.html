@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 15:28'; window.__BID__ = '2026-11-06 15:28:56';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 15:58'; window.__BID__ = '2026-11-06 15:58:27';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2396,6 +2396,7 @@ function backupHTML() {
     '<p class="small muted">' + (OFFLINE ? 'Your ledger is saved only on this phone. Make a backup now and then, so a lost phone or a deleted app does not take it with it.' : 'Copy your whole ledger as text. You can paste it into the offline copy of this app to move everything across.') + (lb ? ' Last backup: ' + L.dateLabel(lb) + ' ' + lb.slice(0, 4) + '.' : '') + '</p>' +
     '<div class="btns">' + (OFFLINE ? '<button class="btn" data-act="backup-share">Save backup file</button>' : '') + '<button class="btn ghost" data-act="backup-copy">Copy backup text</button></div></div></section>' +
     (S.profile.cardsTagged || demo ? '' : '<section><h2>Older entries</h2><div class="card pad stack"><p class="small muted">Your sheet listed which card paid for each entry. This adds those card names to your older entries, so the credit card totals include them.</p><div class="btns"><button class="btn" data-act="tag-cards">Add card names</button></div></div></section>') +
+    inboxHTML() +
     '<section><h2>Saved Apple Pay taps</h2><div class="card pad stack"><p class="small muted">If your Shortcut saves taps to a note instead of opening this app, paste them here, one per line. Each line looks like <code>tap-20261105201500-4.77-Cafe</code>.</p>' +
     '<label>Pasted taps<textarea id="tapstext" placeholder="tap-20261105201500-4.77-Cafe"></textarea></label><div class="btns"><button class="btn" data-act="taps-import">Add these taps</button></div></div></section>';
 }
@@ -2711,8 +2712,38 @@ async function scanReceipts() {
 function val(id) { const e = $('#' + id); return e ? e.value : ''; }
 function numval(id) { const v = parseFloat(val(id)); return isNaN(v) ? NaN : v; }
 
+function inboxLog(raw, status, sum) {
+  mutate(function () {
+    const a = S.profile.inbox = S.profile.inbox || [];
+    a.unshift({ id: L.uid(), t: L.today() + ' ' + new Date().toTimeString().slice(0, 5), raw: String(raw || '').slice(0, 300), status: status, sum: sum || '' });
+    S.profile.inbox = a.slice(0, 60);
+    markProfile();
+  });
+}
+function clearLinkUrl(h) { try { history.replaceState(null, '', location.pathname + (h || '#home')); } catch (e) { /* ignore */ } }
+function inboxHTML() {
+  const a = (S.profile.inbox || []);
+  const bad = a.filter(function (x) { return x.status === 'bad'; }).length;
+  const rows = a.slice(0, 15).map(function (x) {
+    const st = x.status === 'added' ? 'Added' : x.status === 'dup' ? 'Already there' : x.status === 'done' ? 'Added by hand' : x.status === 'gone' ? 'Dismissed' : 'Needs attention';
+    return '<div class="imp-row' + (x.status === 'bad' ? '' : ' dup') + '"><div class="m">' + esc(x.sum || x.raw || '(empty)') + '<small>' + esc(x.t) + ' &middot; ' + st + '</small></div>' +
+      (x.status === 'bad' ? '<button class="btn sm" data-act="inbox-fix" data-id="' + x.id + '">Add</button> <button class="btn sm ghost" data-act="inbox-gone" data-id="' + x.id + '">Dismiss</button>' : '') + '</div>';
+  }).join('');
+  return '<section><h2>Tap inbox' + (bad ? ' (' + bad + ' need attention)' : '') + '</h2><div class="card pad stack"><p class="small muted">Every link your Shortcut sends is saved here first. One that could not be read stays on the list so you can add it by hand.</p>' +
+    (rows ? '<div class="imp-scroll">' + rows + '</div>' : '<p class="small muted">Nothing received yet.</p>') + '</div></section>';
+}
+function inboxSheet(id) {
+  const x = (S.profile.inbox || []).filter(function (y) { return y.id === id; })[0];
+  if (!x) return;
+  const dm = String(x.raw).match(/tap-(\d{4})(\d{2})(\d{2})/);
+  const d = dm ? dm[1] + '-' + dm[2] + '-' + dm[3] : L.today();
+  openSheet('<h3>Add this payment</h3><div class="stack"><p class="small muted">The link said: ' + esc(x.raw) + '</p>' +
+    '<div class="grid2"><label>Amount<input id="ib-a" type="number" inputmode="decimal" step="0.01"></label><label>Date<input id="ib-d" type="date" value="' + d + '"></label></div>' +
+    '<label>Merchant<input id="ib-m" type="text"></label><label>Card<input id="ib-c" type="text" value="' + esc(S.profile.credit && S.profile.credit.match ? 'ABN AMRO Credit Card' : '') + '"></label>' +
+    '<div class="btns"><button class="btn" data-act="inbox-save" data-id="' + id + '">Add</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+}
 function doAddFromTap(p) {
-  if ((S.profile.taps || []).indexOf(p.id) !== -1) { toast('That tap was already logged'); return; }
+  if ((S.profile.taps || []).indexOf(p.id) !== -1) { toast('That tap was already logged'); inboxLog(p.id, 'dup', p.merchant + ' ' + p.amount); clearLinkUrl('#activity'); return; }
   const cat = L.categorize(p.merchant, S.profile.rules);
   let f = {};
   mutate(function () {
@@ -2723,9 +2754,10 @@ function doAddFromTap(p) {
     markProfile();
     toast('Logged ' + m + ' ' + (f.oc ? moneyIn(f.oa, f.oc, true) : money(p.amount, true)) + ' as ' + cat);
   });
+  inboxLog(p.id, 'added', p.merchant + ' ' + (p.cur ? p.cur + ' ' : '') + p.amount);
   viewKey = L.periodKeyOf(p.date) > NOW_KEY ? NOW_KEY : L.periodKeyOf(p.date);
   tab = 'activity'; filt = { q: '', cat: '' };
-  history.replaceState(null, '', '#activity');
+  clearLinkUrl('#activity');
   render();
 }
 
@@ -3111,6 +3143,20 @@ function onAction(act, el) {
       });
       toast('Budget updated: ' + picks.length + ' changed, ' + dels.length + ' deleted'); IMP = null; render(); break;
     }
+    case 'inbox-fix': inboxSheet(el.dataset.id); break;
+    case 'inbox-gone': mutate(function () { const x = (S.profile.inbox || []).filter(function (y) { return y.id === el.dataset.id; })[0]; if (x) { x.status = 'gone'; markProfile(); } }); render(); break;
+    case 'inbox-save': {
+      const amt = numval('ib-a'), d = val('ib-d'), m = val('ib-m').trim(), card = val('ib-c').trim();
+      if (isNaN(amt) || amt <= 0 || !m || !d) { toast('Fill in amount, date and merchant'); break; }
+      mutate(function () {
+        const cat = L.categorize(m, S.profile.rules);
+        const f = tripFields(amt, defaultEntryCur(), d, cat !== 'Income');
+        addTx(Object.assign({ id: L.uid(), d: d, m: L.cleanMerchant(m), c: cat, src: 'tap' }, card ? { card: card } : {}, f));
+        const x = (S.profile.inbox || []).filter(function (y) { return y.id === el.dataset.id; })[0]; if (x) x.status = 'done';
+        markProfile();
+      });
+      closeSheet(); render(); toast('Added'); break;
+    }
     case 'cmp-run': {
       const read = function (id) {
         const f = $(id).files && $(id).files[0];
@@ -3477,7 +3523,9 @@ function linkHash() {
 function badTapNote(h) {
   if (!/^#?tap/i.test(h || '')) return;
   let raw = h; try { raw = decodeURIComponent(h); } catch (e) { /* keep */ }
-  openSheet('<h3>I could not read that link</h3><div class="stack"><p class="small muted">The Shortcut sent this. Send a screenshot of it to Claude so it can be fixed. Nothing was added.</p><div class="codebox">' + esc(raw) + '</div><p class="small muted">Full address received:</p><div class="codebox">' + esc(location.href) + '</div><div class="btns"><button class="btn" data-act="sheet-close">Close</button></div></div>');
+  inboxLog(raw, 'bad', raw);
+  clearLinkUrl('#add');
+  openSheet('<h3>I could not read that link</h3><div class="stack"><p class="small muted">The Shortcut sent this. It is saved in the Tap inbox (Add tab), where you can add it by hand. Nothing was added yet.</p><div class="codebox">' + esc(raw) + '</div><p class="small muted">Full address received:</p><div class="codebox">' + esc(location.href) + '</div><div class="btns"><button class="btn" data-act="sheet-close">Close</button></div></div>');
 }
 function route() {
   const h = linkHash();
