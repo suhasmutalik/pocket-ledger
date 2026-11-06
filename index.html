@@ -1001,17 +1001,18 @@ function trimIdeas(profile, months, nowKey, todayStr, fmt) {
 
 function totals(months, key) {
   const byCat = {};
-  let spent = 0, income = 0, perdiem = 0, count = 0;
+  let spent = 0, income = 0, perdiem = 0, count = 0, tripSpent = 0;
+  const extraBy = {};
   txIn(months, key).forEach(function (t) {
-    if (t.tr) return;
+    if (t.tr) { if (t.c !== 'Income' && t.c !== 'Transfer' && t.a > 0) tripSpent += t.a; return; }
     count++;
     if (t.src === 'perdiem') { perdiem += -t.a; return; }
-    if (t.c === 'Income') { income += -t.a; return; }
+    if (t.c === 'Income') { if (t.it && t.it !== 'base') extraBy[t.it] = (extraBy[t.it] || 0) + -t.a; else income += -t.a; return; }
     if (t.c === 'Transfer') return;
     byCat[t.c] = (byCat[t.c] || 0) + t.a;
     spent += t.a;
   });
-  return { byCat: byCat, spent: spent, income: income, perdiem: perdiem, count: count };
+  return { byCat: byCat, spent: spent, income: income, perdiem: perdiem, count: count, tripSpent: tripSpent, extraBy: extraBy };
 }
 
 function priorKeys(months, key) {
@@ -1070,7 +1071,16 @@ function monthSummary(profile, months, key) {
   (profile.goals || []).forEach(function (g) {
     (g.log || []).forEach(function (e) { if (e.d && e.d >= periodRange(key).start && e.d <= periodRange(key).end) savedMonth += e.a; });
   });
+  const extraSum = Object.keys(t.extraBy).reduce(function (a, k) { return a + t.extraBy[k]; }, 0);
+  const pdNet = Math.max(0, t.perdiem - t.tripSpent);
+  const pool = Math.max(incomeEst, t.income);
+  const extraAvail = Math.max(0, extraSum) + pdNet;
+  const overspend = pool > 0 ? Math.max(0, t.spent - pool) : 0;
+  const extraCovers = Math.min(extraAvail, overspend);
+  const ex = { by: t.extraBy, perdiemNet: pdNet, total: extraAvail, covers: extraCovers, toSavings: extraAvail - extraCovers, baseLeft: pool > 0 ? Math.max(0, pool - t.spent) : 0 };
+  ex.canSave = ex.baseLeft + ex.toSavings;
   return {
+    extra: ex,
     spent: t.spent, income: t.income, perdiem: t.perdiem, byCat: t.byCat, count: t.count, rows: rows,
     fixedSpent: s.fixedSpent, fixedLimit: s.fixedLimit, varSpent: s.varSpent, varLimit: s.varLimit,
     budget: budget, incomeEst: incomeEst, savTarget: savTarget, savedMonth: savedMonth
@@ -1519,7 +1529,7 @@ function homeHTML() {
   const expCard = exp.total > 0 ? '<section><button class="card pad" style="width:100%;display:flex;justify-content:space-between;gap:12px;align-items:baseline" data-act="tab" data-tab="savings"><span>Money you are expecting</span><span class="mono"><b>' + money(exp.total) + '</b></span></button></section>' : '';
   const dueK = demo ? null : L.dueReview(S.months, NOW_KEY, S.profile.reviews || []);
   const revCard = dueK ? '<section><button class="card pad stack" style="width:100%" data-act="review-open" data-auto="1"><b>Your 6-month review is ready</b><span class="small muted">' + L.periodLabel(dueK[0]) + ' to ' + L.periodLabel(dueK[5]) + '. Tap to see how the half year went.</span></button></section>' : '';
-  return '<section class="hero">' + hero + '</section>' + revCard + tripCard + creditHTML() + expCard +
+  return '<section class="hero">' + hero + '</section>' + revCard + tripCard + extraHTML(M) + creditHTML() + expCard +
     '<section><h2>Where the budget stands</h2>' + stand + '</section>' +
     '<section><h2>Needs attention</h2>' + attn + '</section>' +
     '<section><h2>By category</h2>' + cats + '</section>' +
@@ -1564,7 +1574,7 @@ function catIcon(t) {
 function txRow(t) {
   const inc = t.c === 'Income';
   return '<button class="tx" data-act="edit-tx" data-id="' + esc(t.id) + '">' + catIcon(t) + '<span class="tx-main"><span class="tx-m">' + esc(t.m) + '</span>' +
-    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.card ? '<span class="tag">' + (L.isCredit(S.profile, t.card) ? 'Credit card' : esc(t.card)) + '</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
+    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.card ? '<span class="tag">' + (L.isCredit(S.profile, t.card) ? 'Credit card' : esc(t.card)) + '</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.c === 'Income' && t.it && t.it !== 'base' ? '<span class="tag">' + incomeTypeName(t.it) + '</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
     '<span class="amt mono' + (t.a < 0 ? ' pos' : '') + '">' + (t.a < 0 ? '+' : '') + money(Math.abs(t.a), true) + (t.oc ? '<span class="tx-sub" style="display:block;text-align:right">' + esc(t.oc) + ' ' + Number(t.oa).toFixed(2) + '</span>' : '') + '</span></button>';
 }
 
@@ -1870,6 +1880,19 @@ function ringSVG(frac, kind, mark) {
     '<circle class="ring-track" cx="100" cy="100" r="' + R + '"/>' +
     (f > 0 ? '<circle class="ring-fill" cx="100" cy="100" r="' + R + '" stroke="url(#' + id + ')" stroke-dasharray="' + (C * f).toFixed(1) + ' ' + C.toFixed(1) + '" transform="rotate(-90 100 100)"/>' : '') + tick + '</svg>';
 }
+var INCOME_TYPES = [['base', 'Base salary'], ['overtime', 'Overtime'], ['bonus', 'Bonus'], ['other', 'Other extra']];
+function incomeTypeOptions(sel) { return INCOME_TYPES.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === sel ? ' selected' : '') + '>' + x[1] + '</option>'; }).join(''); }
+function incomeTypeName(k) { const f = INCOME_TYPES.filter(function (x) { return x[0] === k; })[0]; return f ? f[1] : ''; }
+function extraHTML(M) {
+  const E = M.extra;
+  const keys = Object.keys(E.by).filter(function (k) { return E.by[k] > 0; });
+  if (!(E.total > 0) && !keys.length) return '';
+  const rows = keys.map(function (k) { return '<div class="kv"><span>' + incomeTypeName(k) + '</span><span class="mono">' + money(E.by[k]) + '</span></div>'; }).join('') + (E.perdiemNet > 0 ? '<div class="kv"><span>Per diem left after trip spending</span><span class="mono">' + money(E.perdiemNet) + '</span></div>' : '');
+  return '<section><h2>Extra income</h2><div class="card list">' + rows +
+    (E.covers > 0 ? '<div class="kv"><span>Covered spending above your salary</span><span class="mono neg">-' + money(E.covers) + '</span></div>' : '') +
+    '<div class="kv"><span><b>Extra that moves to savings</b></span><span class="mono"><b>' + money(E.toSavings) + '</b></span></div>' +
+    '<div class="kv"><span>Can go to savings this month, with unspent salary</span><span class="mono"><b>' + money(E.canSave) + '</b></span></div></div></section>';
+}
 function creditHTML() {
   if (demo) return '';
   const C = L.creditInfo(S.profile, S.months, L.today());
@@ -1932,11 +1955,11 @@ function budgetHTML() {
   const free = M.incomeEst - M.budget - M.savTarget;
   const sav = p.sav || { auto: true, value: 0 };
   return roomHTML() + creditSettingsHTML() + '<section><h2>Monthly income</h2><div class="card pad stack">' +
-    '<div class="grid2"><label>Salary, lowest month<input id="income" inputmode="decimal" type="number" min="0" step="10" placeholder="' + (usingEst ? M.incomeEst : '0') + '" value="' + (p.income > 0 ? p.income : '') + '"></label>' +
-    '<label>Salary, highest month<input id="incomemax" inputmode="decimal" type="number" min="0" step="10" value="' + (p.incomeMax > 0 ? p.incomeMax : '') + '"></label></div>' +
+    '<div class="grid2"><label>Base salary, lowest month<input id="income" inputmode="decimal" type="number" min="0" step="10" placeholder="' + (usingEst ? M.incomeEst : '0') + '" value="' + (p.income > 0 ? p.income : '') + '"></label>' +
+    '<label>Base salary, highest month<input id="incomemax" inputmode="decimal" type="number" min="0" step="10" value="' + (p.incomeMax > 0 ? p.incomeMax : '') + '"></label></div>' +
     '<label>Salary arrives on day<input id="payday" type="number" inputmode="numeric" min="1" max="28" value="' + (p.payDay || 1) + '"></label>' +
     '<p class="muted small">Your month runs from this day to the day before the next one. Everything on Home and Spending follows it.</p>' +
-    '<p class="muted small">' + (p.income > 0 ? 'Your plan uses the lowest figure, so a good month adds to savings' + (p.incomeMax > p.income ? ' (up to ' + money(p.incomeMax - p.income) + ' more)' : '') + '. Per diem is tracked in Trips and is not part of this.' : usingEst ? 'Using ' + money(M.incomeEst) + ' from your past deposits. Enter your lowest month to override.' : 'Leave blank to use the average of your past deposits.') + '</p>' +
+    '<p class="muted small">' + (p.income > 0 ? 'Your plan uses the lowest figure, so a good month adds to savings' + (p.incomeMax > p.income ? ' (up to ' + money(p.incomeMax - p.income) + ' more)' : '') + '. Overtime, bonuses and other extras, and per diem, are not part of the plan. They are counted on Home and move to savings.' : usingEst ? 'Using ' + money(M.incomeEst) + ' from your past deposits. Enter your lowest month to override.' : 'Leave blank to use the average of your past deposits.') + '</p>' +
     '<label>Currency<select id="currency">' + CURS.map(function (c) { return '<option' + (c === p.currency ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label>' +
     '<div class="grid2"><label>Second currency<select id="fxcur"><option value="">None</option>' + CURS.filter(function (c) { return c !== p.currency; }).map(function (c) { return '<option' + (p.fx && p.fx.cur === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label>' +
     '<label>1 ' + (p.fx && p.fx.cur ? p.fx.cur : '...') + ' in ' + p.currency + '<input id="fxrate" type="number" inputmode="decimal" step="0.0001" min="0" value="' + (p.fx && p.fx.rate ? p.fx.rate : '') + '"></label></div>' +
@@ -2144,6 +2167,7 @@ function addHTML() {
     (S.profile.fx && S.profile.fx.cur ? '<label>Paid in<select id="n-cur">' + [S.profile.currency, S.profile.fx.cur].map(function (c) { return '<option' + (c === defaultEntryCur() ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label><p class="small muted">An entry in the second currency goes to your trip.</p>' : '') +
     '<label>Merchant<input id="n-m" type="text" placeholder="Where did it go?"></label>' +
     '<label>Category<select id="n-c"><option value="">Pick automatically</option>' + catOptions('', true) + '</select></label>' +
+    '<label>If it is income, it is<select id="n-it">' + incomeTypeOptions('base') + '</select></label>' +
     '<div class="btns"><button class="btn" data-act="add-tx">Add</button></div></div></section>' +
     scanSectionHTML() +
     '<section><h2>Import a statement</h2><div class="card pad stack">' +
@@ -2220,6 +2244,7 @@ function txSheet(id) {
     '<label>Merchant<input id="f-m" type="text" value="' + esc(t.m) + '"></label>' +
     '<div class="grid2"><label>Amount<input id="f-a" type="number" inputmode="decimal" step="0.01" value="' + Math.abs(t.a) * (t.c === 'Income' ? 1 : Math.sign(t.a || 1)) + '"></label><label>Date<input id="f-d" type="date" value="' + t.d + '"></label></div>' +
     '<label>Category<select id="f-c" data-bind="f-c">' + catOptions(t.c, true) + '</select></label>' +
+    (t.c === 'Income' ? '<label>Income type<select id="f-it">' + incomeTypeOptions(t.it || 'base') + '</select></label>' : '') +
     '<label>Trip<select id="f-tr"><option value="auto"' + (!t.pin ? ' selected' : '') + '>Automatic, by trip dates</option><option value="none"' + (t.pin === 'none' ? ' selected' : '') + '>Everyday spending, not a trip</option>' + (S.profile.trips || []).map(function (x) { return '<option value="' + esc(x.id) + '"' + (t.pin === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
     '<label>Card<input id="f-card" type="text" value="' + esc(t.card || '') + '" placeholder="Leave empty if not paid by card"></label>' +
     '<label class="inline"><input type="checkbox" id="f-rule"> Always file this merchant under this category</label>' +
@@ -2446,7 +2471,7 @@ function onAction(act, el) {
       if (isNaN(a) || a === 0 || !m) { toast('Enter an amount and a merchant'); break; }
       let c = val('n-c') || L.categorize(m, S.profile.rules);
       let nf = null;
-      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: L.uid(), d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, nf)); })) {
+      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: L.uid(), d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
         $('#n-a').value = ''; $('#n-m').value = ''; toast(nf && nf.tr ? 'Added to your trip' : 'Added to ' + c);
       }
       break;
@@ -2710,6 +2735,7 @@ function saveTx(id) {
     const t = f.t;
     t.m = m; t.d = d; t.c = c; t.a = c === 'Income' ? -Math.abs(a) : a;
     const pin = val('f-tr'); if (pin === 'auto') delete t.pin; else t.pin = pin;
+    if (c === 'Income') { const it = val('f-it'); if (it && it !== 'base') t.it = it; else delete t.it; } else delete t.it;
     const cd = val('f-card').trim(); if (cd) t.card = cd; else delete t.card;
     syncTx(t);
     if (newK !== oldK) { f.arr.splice(f.j, 1); (S.months[newK] = S.months[newK] || []).push(t); markMonth(oldK); }
