@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 10:05'; window.__BID__ = '2026-11-06 10:05:50';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 11:02'; window.__BID__ = '2026-11-06 11:02:40';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2379,6 +2379,20 @@ function existingKeys() {
 function runParse() {
   const res = L.parseStatement(IMP.text, IMP.opts, S.profile.rules, existingKeys());
   IMP.res = res;
+  if (res.rows && !IMP.scan) {
+    /* looser match: same amount within 5 days of an entry you already have (banks book a few days later). Each entry matches only once. */
+    const pool = allTx().map(function (t) { return { d: t.d, c: Math.round(Number(t.a) * 100), used: false }; });
+    function dayNum(x) { const p = String(x).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5); }
+    res.rows.forEach(function (r) {
+      if (r.dup) return;
+      if (/card services|creditcard|credit card|icscards|abn amro card|visa|mastercard/i.test(r.m) && r.a > 0) { r.dup = true; r.why = 'card bill, already counted'; return; }
+      const c = Math.round(Number(r.a) * 100), dn = dayNum(r.d);
+      for (let i = 0; i < pool.length; i++) {
+        const p = pool[i];
+        if (!p.used && p.c === c && Math.abs(dayNum(p.d) - dn) <= 5) { p.used = true; r.dup = true; r.why = 'already in your ledger'; return; }
+      }
+    });
+  }
   if (res.rows) res.rows.forEach(function (r) { r.inc = !r.dup; });
 }
 function renderImpBox() {
@@ -2394,7 +2408,7 @@ function renderImpBox() {
     (IMP.scan ? '' : '<div class="grid2"><label>Date order<select id="o-date"><option value="auto"' + (IMP.opts.dateFmt === 'auto' ? ' selected' : '') + '>Auto (' + (res.detected.dateFmt === 'dmy' ? 'DD/MM' : 'MM/DD') + ')</option><option value="mdy"' + (IMP.opts.dateFmt === 'mdy' ? ' selected' : '') + '>MM/DD/YYYY</option><option value="dmy"' + (IMP.opts.dateFmt === 'dmy' ? ' selected' : '') + '>DD/MM/YYYY</option></select></label>' +
     (res.detected.mode === 'single' ? '<label>Spending shows as<select id="o-sign"><option value="auto"' + (IMP.opts.sign === 'auto' ? ' selected' : '') + '>Auto (' + (res.detected.sign === 'negspend' ? 'negative' : 'positive') + ')</option><option value="negspend"' + (IMP.opts.sign === 'negspend' ? ' selected' : '') + '>Negative numbers</option><option value="posspend"' + (IMP.opts.sign === 'posspend' ? ' selected' : '') + '>Positive numbers</option></select></label>' : '<div></div>') + '</div>') +
     '<div class="imp-scroll">' + shown.map(function (r, i) {
-      return '<div class="imp-row' + (r.dup ? ' dup' : '') + '"><input type="checkbox" data-bind="imp-inc" data-i="' + i + '"' + (r.inc ? ' checked' : '') + ' aria-label="Include"><div class="m">' + esc(r.m) + '<small>' + L.dateLabel(r.d) + (r.dup ? ' &middot; already imported' : '') + (r.cur && r.cur !== S.profile.currency ? ' &middot; ' + esc(r.cur) + ' ' + Number(r.oa || 0).toFixed(2) : '') + '</small></div><span class="amt mono' + (r.a < 0 ? ' pos' : '') + '">' + (r.a < 0 ? '+' : '') + money(Math.abs(r.a), true) + '</span>' +
+      return '<div class="imp-row' + (r.dup ? ' dup' : '') + '"><input type="checkbox" data-bind="imp-inc" data-i="' + i + '"' + (r.inc ? ' checked' : '') + ' aria-label="Include"><div class="m">' + esc(r.m) + '<small>' + L.dateLabel(r.d) + (r.dup ? ' &middot; ' + esc(r.why || 'already imported') : '') + (r.cur && r.cur !== S.profile.currency ? ' &middot; ' + esc(r.cur) + ' ' + Number(r.oa || 0).toFixed(2) : '') + '</small></div><span class="amt mono' + (r.a < 0 ? ' pos' : '') + '">' + (r.a < 0 ? '+' : '') + money(Math.abs(r.a), true) + '</span>' +
         '<select data-bind="imp-cat" data-i="' + i + '" aria-label="Category">' + catOptions(r.c, true) + '</select></div>';
     }).join('') + '</div>' + (rows.length > 300 ? '<p class="small muted">Showing the first 300 rows to review. All checked rows are imported.</p>' : '') +
     '<div class="btns"><button class="btn" data-act="imp-go" id="impgo"></button><button class="btn ghost" data-act="imp-cancel">Cancel</button></div></div>';
