@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 11:02'; window.__BID__ = '2026-11-06 11:02:40';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 11:14'; window.__BID__ = '2026-11-06 11:14:01';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -681,6 +681,49 @@ function parseStatement(text, opts, rules, existing) {
     out.push(t);
   });
   return { rows: out, skipped: skipped, detected: { dateFmt: dfmt, sign: mode === 'single' ? sign : 'split', mode: mode } };
+}
+
+
+/* Compare ING and ABN statements with each other and with the ledger.
+   rows: {d,m,a,c} with a>0 spend, a<0 income. ledger: [{d,a}] */
+function compareStatements(ing, abn, ledger) {
+  function dn(x) { const p = String(x).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5); }
+  const rows = [];
+  (ing || []).forEach(function (r) { rows.push(Object.assign({}, r, { bank: 'ING' })); });
+  (abn || []).forEach(function (r) { rows.push(Object.assign({}, r, { bank: 'ABN' })); });
+  rows.forEach(function (r) { r.cents = Math.round(r.a * 100); r.status = 'new'; r.why = ''; });
+  /* 1. money moved between your own two accounts */
+  rows.forEach(function (r, i) {
+    if (r.status !== 'new' || r.bank !== 'ING') return;
+    for (let j = 0; j < rows.length; j++) {
+      const q = rows[j];
+      if (q.bank !== 'ABN' || q.status !== 'new') continue;
+      if (q.cents === -r.cents && Math.abs(dn(q.d) - dn(r.d)) <= 5) {
+        r.status = q.status = 'transfer';
+        r.why = q.why = r.cents > 0 ? 'moved from ING to ABN' : 'moved from ABN to ING';
+        return;
+      }
+    }
+  });
+  /* 2. transfers to ABN whose other side is not in the file, and card bill payments */
+  rows.forEach(function (r) {
+    if (r.status !== 'new') return;
+    if (r.bank === 'ING' && /abn\s*amro/i.test(r.m) && !/card/i.test(r.m)) { r.status = 'transfer'; r.why = 'sent to your ABN account'; return; }
+    if (r.cents > 0 && /card services|creditcard|credit card|icscards|abn amro card/i.test(r.m)) { r.status = 'card'; r.why = 'card bill, already counted'; }
+  });
+  /* 3. already in the ledger: same amount within 5 days, each entry used once */
+  const pool = (ledger || []).map(function (t) { return { d: t.d, c: Math.round(Number(t.a) * 100), used: false }; });
+  rows.forEach(function (r) {
+    if (r.status !== 'new') return;
+    for (let i = 0; i < pool.length; i++) {
+      const p = pool[i];
+      if (!p.used && p.c === r.cents && Math.abs(dn(p.d) - dn(r.d)) <= 5) { p.used = true; r.status = 'ledger'; r.why = 'already in your ledger'; return; }
+    }
+  });
+  rows.sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
+  const count = { new: 0, ledger: 0, transfer: 0, card: 0 };
+  rows.forEach(function (r) { count[r.status]++; });
+  return { rows: rows, count: count };
 }
 
 /* ---------- Apple Pay link and quick add ---------- */
@@ -1262,7 +1305,7 @@ const api = {
   FIXED: FIXED, VARIABLE: VARIABLE, SPEND_CATS: SPEND_CATS, ALL_CATS: ALL_CATS, DEFAULT_TYPE: DEFAULT_TYPE,
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
-  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, txKey: txKey,
+  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
   daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
@@ -2356,6 +2399,11 @@ function addHTML() {
     '<label>CSV file<input id="impfile" type="file"></label>' +
     '<label>Or paste the rows<textarea id="imptext" placeholder="Date,Description,Amount"></textarea></label>' +
     '<div class="btns"><button class="btn" data-act="imp-parse">Review import</button></div><div id="impBox"></div></div></section>' +
+    '<section><h2>Compare ING and ABN</h2><div class="card pad stack">' +
+    '<p class="small muted">Choose both bank files. Nothing is changed until you tap Import. The app shows what is missing from your ledger, and hides money you moved between your own accounts.</p>' +
+    '<label>ING file<input id="cmping" type="file"></label>' +
+    '<label>ABN AMRO file<input id="cmpabn" type="file"></label>' +
+    '<div class="btns"><button class="btn" data-act="cmp-run">Compare</button></div><div id="cmpBox"></div></div></section>' +
     backupHTML() +
     '<details class="card"><summary>Load a ledger file</summary><div class="body"><p class="small muted">Use a file made for you in chat (for example from your Google Sheets). This replaces what is in the ledger now.</p>' +
     '<label>Ledger file (.json)<input id="restorefile" type="file" accept=".json,application/json"></label><label>Or paste a copied backup<textarea id="restoretext" placeholder="Paste backup text here"></textarea></label><label class="inline"><input type="checkbox" id="restorepart"> Keep my entries, bills and trips. Load only savings, expected money and salary.</label><div class="btns"><button class="btn" data-act="restore" id="restorego">Load file</button></div></div></details>' +
@@ -2411,6 +2459,24 @@ function renderImpBox() {
       return '<div class="imp-row' + (r.dup ? ' dup' : '') + '"><input type="checkbox" data-bind="imp-inc" data-i="' + i + '"' + (r.inc ? ' checked' : '') + ' aria-label="Include"><div class="m">' + esc(r.m) + '<small>' + L.dateLabel(r.d) + (r.dup ? ' &middot; ' + esc(r.why || 'already imported') : '') + (r.cur && r.cur !== S.profile.currency ? ' &middot; ' + esc(r.cur) + ' ' + Number(r.oa || 0).toFixed(2) : '') + '</small></div><span class="amt mono' + (r.a < 0 ? ' pos' : '') + '">' + (r.a < 0 ? '+' : '') + money(Math.abs(r.a), true) + '</span>' +
         '<select data-bind="imp-cat" data-i="' + i + '" aria-label="Category">' + catOptions(r.c, true) + '</select></div>';
     }).join('') + '</div>' + (rows.length > 300 ? '<p class="small muted">Showing the first 300 rows to review. All checked rows are imported.</p>' : '') +
+    '<div class="btns"><button class="btn" data-act="imp-go" id="impgo"></button><button class="btn ghost" data-act="imp-cancel">Cancel</button></div></div>';
+  updateImpCount();
+}
+function renderCmp() {
+  const box = $('#cmpBox');
+  if (!box || !IMP || !IMP.cmp) return;
+  const rows = IMP.res.rows, c = IMP.count;
+  function row(r, i) {
+    return '<div class="imp-row' + (r.status !== 'new' ? ' dup' : '') + '"><input type="checkbox" data-bind="imp-inc" data-i="' + i + '"' + (r.inc ? ' checked' : '') + ' aria-label="Include"><div class="m">' + esc(r.m) + '<small>' + L.dateLabel(r.d) + ' &middot; ' + r.bank + (r.why ? ' &middot; ' + esc(r.why) : '') + '</small></div><span class="amt mono' + (r.a < 0 ? ' pos' : '') + '">' + (r.a < 0 ? '+' : '') + money(Math.abs(r.a), true) + '</span>' +
+      '<select data-bind="imp-cat" data-i="' + i + '" aria-label="Category">' + catOptions(r.c, true) + '</select></div>';
+  }
+  function group(st, title, open) {
+    const list = rows.map(function (r, i) { return r.status === st ? row(r, i) : ''; }).join('');
+    if (!list) return '';
+    return '<details class="card"' + (open ? ' open' : '') + '><summary>' + title + ' (' + c[st] + ')</summary><div class="body"><div class="imp-scroll">' + list + '</div></div></details>';
+  }
+  box.innerHTML = '<div class="stack"><div class="note"><b>' + rows.length + ' rows.</b> ' + c.new + ' not in your ledger, ' + c.ledger + ' already there, ' + c.transfer + ' moved between your accounts, ' + c.card + ' card bill payments.</div>' +
+    group('new', 'Not in your ledger', true) + group('transfer', 'Moved between your accounts', false) + group('card', 'Card bill payments', false) + group('ledger', 'Already in your ledger', false) +
     '<div class="btns"><button class="btn" data-act="imp-go" id="impgo"></button><button class="btn ghost" data-act="imp-cancel">Cancel</button></div></div>';
   updateImpCount();
 }
@@ -2944,7 +3010,29 @@ function onAction(act, el) {
     }
     case 'scan-stop': if (scanCtl) scanCtl.abort(); break;
     case 'scan-go': scanReceipts(); break;
-    case 'imp-cancel': IMP = null; ['#impBox', '#scanBox'].forEach(function (s) { const b = $(s); if (b) b.innerHTML = ''; }); break;
+    case 'cmp-run': {
+      const read = function (id) {
+        const f = $(id).files && $(id).files[0];
+        return new Promise(function (res) {
+          if (!f) { res(''); return; }
+          const fr = new FileReader(); fr.onload = function () { res(String(fr.result || '')); }; fr.onerror = function () { res(''); }; fr.readAsText(f);
+        });
+      };
+      Promise.all([read('#cmping'), read('#cmpabn')]).then(function (t) {
+        if (!t[0].trim() && !t[1].trim()) { toast('Choose at least one file'); return; }
+        const o = { dateFmt: 'auto', sign: 'auto' };
+        const a = t[0].trim() ? L.parseStatement(t[0], o, S.profile.rules, {}) : { rows: [] };
+        const b = t[1].trim() ? L.parseStatement(t[1], o, S.profile.rules, {}) : { rows: [] };
+        const box = $('#cmpBox');
+        if (a.error || b.error) { box.innerHTML = '<div class="note">' + esc((a.error ? 'ING: ' + a.error : '') + ' ' + (b.error ? 'ABN: ' + b.error : '')) + '</div>'; return; }
+        const cmp = L.compareStatements(a.rows, b.rows, allTx().map(function (x) { return { d: x.d, a: x.a }; }));
+        cmp.rows.forEach(function (r) { r.inc = r.status === 'new'; });
+        IMP = { text: '', cur: S.profile.currency, opts: { dateFmt: 'auto', sign: 'auto' }, cmp: true, res: { rows: cmp.rows, detected: { dateFmt: 'auto', mode: 'single', sign: 'negspend' }, skipped: 0 }, count: cmp.count };
+        renderCmp();
+      });
+      break;
+    }
+    case 'imp-cancel': IMP = null; ['#impBox', '#scanBox', '#cmpBox'].forEach(function (s) { const b = $(s); if (b) b.innerHTML = ''; }); break;
     case 'imp-go': {
       const rows = IMP.res.rows.filter(function (r) { return r.inc; });
       if (!rows.length) break;
