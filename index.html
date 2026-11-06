@@ -360,6 +360,17 @@ details.card > summary::after { border-color: var(--muted); }
 .card .ringnum { font-size: 30px; }
 .card .row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; font-size: 15px; }
 .card .row > span:first-child { min-width: 0; color: var(--muted); }
+.fold { background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)), var(--surface); border: 1px solid var(--line); border-radius: 24px; overflow: hidden; }
+.fold > summary { list-style: none; cursor: pointer; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); font-weight: 500; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: rotate(45deg) translate(-2px, -2px); transition: transform .2s; flex: none; }
+.fold[open] > summary::after { transform: rotate(-135deg); }
+.fold[open] > summary { border-bottom: 1px solid var(--line); }
+.fold-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.fold-body .card { background: transparent; border: 0; box-shadow: none; border-radius: 0; }
+.fold-body .card.pad { padding: 0; }
+.fold-body .card.list { margin: 0 -14px; }
+.fold .sec-head { justify-content: flex-end; padding-right: 0; }
 
 </style>
 </head>
@@ -1438,6 +1449,25 @@ function updateBanner() {
   if (Store.mode === 'local' && loaded && !OFFLINE) h += loadFailed ? '<div class="note"><b>Could not reach your saved ledger.</b> Showing what this browser has. Reopen the app in a moment to try again.</div>' : '<div class="note">Not signed in to cloud saving. Your data stays in <b>this browser only</b>.</div>';
   $('#banner').innerHTML = h;
 }
+const foldOpen = {};
+function foldSections(html) {
+  return html.split('</section>').map(function (chunk, i, all) {
+    if (i === all.length - 1) return chunk;
+    const k = chunk.lastIndexOf('<section>');
+    if (k < 0) return chunk + '</section>';
+    const head = chunk.slice(0, k), sec = chunk.slice(k + 9);
+    const m = sec.match(/<h2>(.*?)<\/h2>/);
+    if (!m) return chunk + '</section>';
+    const title = m[1];
+    const body = sec.replace(m[0], '');
+    const key = title.replace(/<[^>]*>/g, '');
+    return head + '<section><details class="fold" data-fold="' + esc(key) + '"' + (foldOpen[key] ? ' open' : '') + '><summary>' + title + '</summary><div class="fold-body">' + body + '</div></details></section>';
+  }).join('');
+}
+document.addEventListener('toggle', function (e) {
+  const d = e.target;
+  if (d && d.classList && d.classList.contains('fold')) foldOpen[d.dataset.fold] = d.open;
+}, true);
 function render() {
   if (!loaded) {
     renderTabs();
@@ -1451,8 +1481,9 @@ function render() {
   $('#mnext').disabled = viewKey >= NOW_KEY;
   renderTabs();
   const v = { home: homeHTML, activity: activityHTML, budget: budgetHTML, trips: tripsHTML, savings: savingsHTML, add: addHTML }[tab]();
+  const vv = (tab === 'budget' || tab === 'savings') ? foldSections(v) : v;
   const TITLES = { home: 'Summary', activity: 'Spending', budget: 'Budget', trips: 'Trips', savings: 'Savings', add: 'Add' };
-  $('#view').innerHTML = '<h1 class="lt">' + TITLES[tab] + '</h1>' + v;
+  $('#view').innerHTML = '<h1 class="lt">' + TITLES[tab] + '</h1>' + vv;
   if (tab === 'activity' && sp.view !== 'insights') updateActList();
   if (tab === 'add' && IMP) renderImpBox();
   updateBanner();
