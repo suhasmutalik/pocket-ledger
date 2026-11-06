@@ -556,6 +556,11 @@ function parseStatement(text, opts, rules, existing) {
 
 /* ---------- Apple Pay link and quick add ---------- */
 /* forgiving form: #tap-DATE-<amount as the phone prints it>-<merchant as is> */
+function splitCard(h) {
+  const i = h.indexOf('~~');
+  if (i < 0) return { h: h, card: '' };
+  return { h: h.slice(0, i), card: h.slice(i + 2).replace(/\s+/g, ' ').trim().slice(0, 40) };
+}
 function parseTapLoose(h) {
   const m = h.replace(/^#/, '').match(/^tap-(\d{8,14})-(.+)$/);
   if (!m) return null;
@@ -574,6 +579,13 @@ function parseTapLoose(h) {
 function parseTapHash(hash) {
   let h = String(hash || '');
   try { h = decodeURIComponent(h); } catch (e) { /* keep raw */ }
+  const sc = splitCard(h);
+  h = sc.h;
+  const res = parseTapCore(h);
+  if (res && sc.card) res.card = sc.card;
+  return res;
+}
+function parseTapCore(h) {
   const m = h.replace(/^#/, '').match(/^tap-(\d{8,14})-(\d+(?:d\d+)?)([A-Za-z]{3})?-(.+)$/);
   if (!m) return parseTapLoose(h);
   const amount = parseFloat(m[2].replace('d', '.'));
@@ -586,7 +598,7 @@ function parseTapHash(hash) {
 
 function parseQuick(text) {
   const tap = parseTapHash(text.trim().indexOf('#') === 0 ? text.trim() : '#' + text.trim());
-  if (tap) return { merchant: tap.merchant, amount: tap.amount, date: tap.date, id: tap.id, cur: tap.cur };
+  if (tap) return { merchant: tap.merchant, amount: tap.amount, date: tap.date, id: tap.id, cur: tap.cur, card: tap.card };
   const s = String(text || '').trim();
   const re = /[-−]?\s?[$€£₹]?\s?\d[\d,]*(?:\.\d{1,2})?/g;
   let m, last = null;
@@ -597,6 +609,48 @@ function parseQuick(text) {
   const merchant = (s.slice(0, last.index) + ' ' + s.slice(last.index + last[0].length)).replace(/[$€£₹]/g, '').replace(/\s+/g, ' ').trim();
   if (!merchant) return null;
   return { merchant: cleanMerchant(merchant), amount: amount };
+}
+
+
+/* ---------- credit card statements ---------- */
+function creditCfg(profile) {
+  const c = (profile && profile.credit) || {};
+  const bd = Math.round(Number(c.billDay));
+  return { match: String(c.match || 'credit').toLowerCase().trim(), billDay: bd >= 1 && bd <= 28 ? bd : 8, paid: c.paid || {} };
+}
+function isCredit(profile, card) {
+  const cfg = creditCfg(profile);
+  return !!card && !!cfg.match && String(card).toLowerCase().indexOf(cfg.match) >= 0;
+}
+function dateYMD(y, m, d) { return ymd(new Date(y, m - 1, d)); }
+function lastOfMonth(y, m) { return dateYMD(y, m, new Date(y, m, 0).getDate()); }
+/* statement generated on billDay; it covers the day after the previous billDay up to billDay; due at the end of that month */
+function creditInfo(profile, months, todayStr) {
+  const cfg = creditCfg(profile);
+  const td = (todayStr || today()).split('-').map(Number);
+  let gy = td[0], gm = td[1];
+  if (td[2] < cfg.billDay) { gm -= 1; if (gm < 1) { gm = 12; gy -= 1; } }
+  const gen = dateYMD(gy, gm, cfg.billDay);
+  let py = gy, pm = gm - 1; if (pm < 1) { pm = 12; py -= 1; }
+  const prevGen = dateYMD(py, pm, cfg.billDay);
+  const open = { from: addDays(gen, 1), to: addDays(dateYMD(gm === 12 ? gy + 1 : gy, gm === 12 ? 1 : gm + 1, cfg.billDay), 0) };
+  const tx = [];
+  Object.keys(months || {}).forEach(function (k) {
+    (months[k] || []).forEach(function (t) { if (t.card && isCredit(profile, t.card) && t.c !== 'Transfer') tx.push(t); });
+  });
+  const sum = function (a, b) {
+    let total = 0, count = 0;
+    tx.forEach(function (t) { if (t.d >= a && t.d <= b) { total += Number(t.a) || 0; count++; } });
+    return { total: Math.round(total * 100) / 100, count: count };
+  };
+  const o = sum(open.from, open.to);
+  const st = sum(addDays(prevGen, 1), gen);
+  const due = lastOfMonth(gy, gm);
+  return {
+    any: tx.length > 0, billDay: cfg.billDay,
+    open: { from: open.from, to: open.to, total: o.total, count: o.count },
+    stmt: { from: addDays(prevGen, 1), to: gen, total: st.total, count: st.count, due: due, paid: !!cfg.paid[gen], key: gen, overdue: due < (todayStr || today()) && !cfg.paid[gen] }
+  };
 }
 
 /* ---------- month maths ---------- */
@@ -977,7 +1031,7 @@ const api = {
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
   parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, txKey: txKey,
-  parseTapHash: parseTapHash, parseQuick: parseQuick,
+  parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
   daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -995,7 +1049,7 @@ const TABS = ['home', 'activity', 'budget', 'trips', 'savings', 'add'];
 
 /* ---------- state ---------- */
 function defaultProfile() {
-  return { v: 1, currency: 'USD', income: 0, budgets: {}, sav: { auto: true, value: 0 }, rules: {}, goals: [], taps: [], appLink: '', cats: [], bills: [], posted: [], fx: null, trips: [], owed: [], incomeMax: 0, reviews: [], plan: { target: 0 } };
+  return { v: 1, currency: 'USD', income: 0, budgets: {}, sav: { auto: true, value: 0 }, rules: {}, goals: [], taps: [], appLink: '', cats: [], bills: [], posted: [], fx: null, trips: [], owed: [], incomeMax: 0, reviews: [], plan: { target: 0 }, credit: { match: 'credit', billDay: 8, paid: {} } };
 }
 let S = { profile: defaultProfile(), months: {} };
 let demo = true;
@@ -1382,7 +1436,7 @@ function homeHTML() {
   const expCard = exp.total > 0 ? '<section><button class="card pad" style="width:100%;display:flex;justify-content:space-between;gap:12px;align-items:baseline" data-act="tab" data-tab="savings"><span>Money you are expecting</span><span class="mono"><b>' + money(exp.total) + '</b></span></button></section>' : '';
   const dueK = demo ? null : L.dueReview(S.months, NOW_KEY, S.profile.reviews || []);
   const revCard = dueK ? '<section><button class="card pad stack" style="width:100%" data-act="review-open" data-auto="1"><b>Your 6-month review is ready</b><span class="small muted">' + L.periodLabel(dueK[0]) + ' to ' + L.periodLabel(dueK[5]) + '. Tap to see how the half year went.</span></button></section>' : '';
-  return '<section class="hero">' + hero + '</section>' + revCard + tripCard + expCard +
+  return '<section class="hero">' + hero + '</section>' + revCard + tripCard + creditHTML() + expCard +
     '<section><h2>Where the budget stands</h2>' + stand + '</section>' +
     '<section><h2>Needs attention</h2>' + attn + '</section>' +
     '<section><h2>By category</h2>' + cats + '</section>' +
@@ -1427,7 +1481,7 @@ function catIcon(t) {
 function txRow(t) {
   const inc = t.c === 'Income';
   return '<button class="tx" data-act="edit-tx" data-id="' + esc(t.id) + '">' + catIcon(t) + '<span class="tx-main"><span class="tx-m">' + esc(t.m) + '</span>' +
-    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
+    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.card ? '<span class="tag">' + (L.isCredit(S.profile, t.card) ? 'Credit card' : esc(t.card)) + '</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
     '<span class="amt mono' + (t.a < 0 ? ' pos' : '') + '">' + (t.a < 0 ? '+' : '') + money(Math.abs(t.a), true) + (t.oc ? '<span class="tx-sub" style="display:block;text-align:right">' + esc(t.oc) + ' ' + Number(t.oa).toFixed(2) + '</span>' : '') + '</span></button>';
 }
 
@@ -1719,6 +1773,31 @@ function roomHTML() {
     (ideas.length ? ideas.map(function (i) { return '<div class="idea"><div class="top-row"><b>' + esc(i.title) + '</b><span class="mono">' + (i.save > 0 ? '+' + money(i.save) + '/mo' : esc(i.note || '')) + '</span></div><div class="small muted">' + esc(i.why) + '</div><span class="tag">' + i.tag + '</span></div>'; }).join('') : '<div class="empty">Nothing stands out yet. Log a few more months.</div>') + '</div>' +
     '<p class="small muted" style="padding:8px 4px 0">Suggestions come from your own bills and the last few months of spending. They are a starting point, not financial advice, and only you know what is worth keeping.</p></section>';
 }
+
+function creditHTML() {
+  if (demo) return '';
+  const C = L.creditInfo(S.profile, S.months, L.today());
+  if (!C.any) return '';
+  const lab = function (d) { return L.dateLabel(d); };
+  const st = C.stmt;
+  let stmt = '';
+  if (st.count > 0 || st.total !== 0) {
+    stmt = '<div class="row"><span>Last statement (' + lab(st.from) + ' to ' + lab(st.to) + ')</span><span class="mono"><b>' + money(st.total) + '</b></span></div>' +
+      '<div class="row"><span>' + (st.paid ? 'Paid' : (st.overdue ? 'Was due ' : 'Pay by ') + lab(st.due)) + '</span>' +
+      (st.paid ? '<button class="link" data-act="cc-paid" data-key="' + st.key + '" data-on="0">Undo</button>' : '<button class="btn" style="padding:6px 12px" data-act="cc-paid" data-key="' + st.key + '" data-on="1">Mark paid</button>') + '</div>';
+  }
+  return '<section><h2>Credit card</h2><div class="card pad stack">' +
+    '<div class="row"><span>This statement so far (' + lab(C.open.from) + ' to ' + lab(C.open.to) + ')</span><span class="mono"><b>' + money(C.open.total) + '</b></span></div>' +
+    '<div class="small muted">' + C.open.count + (C.open.count === 1 ? ' payment' : ' payments') + '. The statement is made on day ' + C.billDay + ' and paid by the end of that month.</div>' +
+    stmt + '</div></section>';
+}
+function creditSettingsHTML() {
+  const cfg = L.creditCfg(S.profile);
+  return '<section><h2>Credit card</h2><div class="card pad stack">' +
+    '<div class="grid2"><label>Statement day<input id="cc-day" type="number" inputmode="numeric" min="1" max="28" value="' + cfg.billDay + '"></label>' +
+    '<label>Card name contains<input id="cc-match" type="text" value="' + esc(cfg.match) + '"></label></div>' +
+    '<p class="small muted">Taps from a card whose name contains this word are counted toward the credit card bill. You pay the bill by the end of the month. Add that payment as a Card payment so it is not counted twice.</p></div></section>';
+}
 function budgetHTML() {
   const M = L.monthSummary(S.profile, S.months, viewKey);
   const p = S.profile;
@@ -1735,7 +1814,7 @@ function budgetHTML() {
   const vari = M.rows.filter(function (r) { return r.type !== 'fixed'; }).map(rowHTML).join('');
   const free = M.incomeEst - M.budget - M.savTarget;
   const sav = p.sav || { auto: true, value: 0 };
-  return roomHTML() + '<section><h2>Monthly income</h2><div class="card pad stack">' +
+  return roomHTML() + creditSettingsHTML() + '<section><h2>Monthly income</h2><div class="card pad stack">' +
     '<div class="grid2"><label>Salary, lowest month<input id="income" inputmode="decimal" type="number" min="0" step="10" placeholder="' + (usingEst ? M.incomeEst : '0') + '" value="' + (p.income > 0 ? p.income : '') + '"></label>' +
     '<label>Salary, highest month<input id="incomemax" inputmode="decimal" type="number" min="0" step="10" value="' + (p.incomeMax > 0 ? p.incomeMax : '') + '"></label></div>' +
     '<label>Salary arrives on day<input id="payday" type="number" inputmode="numeric" min="1" max="28" value="' + (p.payDay || 1) + '"></label>' +
@@ -1911,7 +1990,7 @@ function addTapsBulk(text) {
       if ((S.profile.taps || []).indexOf(p.id) !== -1) { dup++; return; }
       const cat = L.categorize(p.merchant, S.profile.rules);
       const f = tripFields(p.amount, p.cur || defaultEntryCur(), p.date, cat !== 'Income');
-      addTx(Object.assign({ id: L.uid(), d: p.date, m: L.cleanMerchant(p.merchant), c: cat, src: 'tap' }, f));
+      addTx(Object.assign({ id: L.uid(), d: p.date, m: L.cleanMerchant(p.merchant), c: cat, src: 'tap' }, p.card ? { card: p.card } : {}, f));
       S.profile.taps = (S.profile.taps || []).concat([p.id]).slice(-300);
       n++; if (p.date > latest) latest = p.date;
     });
@@ -1924,7 +2003,7 @@ function addTapsBulk(text) {
 }
 function addHTML() {
   const link = S.profile.appLink || '';
-  const tmpl = (link || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]';
+  const tmpl = (link || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]';
   return '<section><h2>Quick add</h2><div class="card pad stack"><label>Merchant and amount<input id="qa" type="text" placeholder="Blue Bottle 5.50" autocomplete="off"></label>' +
     '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button></div></div></section>' +
     '<section><h2>Add with details</h2><div class="card pad stack">' +
@@ -2009,6 +2088,7 @@ function txSheet(id) {
     '<div class="grid2"><label>Amount<input id="f-a" type="number" inputmode="decimal" step="0.01" value="' + Math.abs(t.a) * (t.c === 'Income' ? 1 : Math.sign(t.a || 1)) + '"></label><label>Date<input id="f-d" type="date" value="' + t.d + '"></label></div>' +
     '<label>Category<select id="f-c" data-bind="f-c">' + catOptions(t.c, true) + '</select></label>' +
     '<label>Trip<select id="f-tr"><option value="auto"' + (!t.pin ? ' selected' : '') + '>Automatic, by trip dates</option><option value="none"' + (t.pin === 'none' ? ' selected' : '') + '>Everyday spending, not a trip</option>' + (S.profile.trips || []).map(function (x) { return '<option value="' + esc(x.id) + '"' + (t.pin === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
+    '<label>Card<input id="f-card" type="text" value="' + esc(t.card || '') + '" placeholder="Leave empty if not paid by card"></label>' +
     '<label class="inline"><input type="checkbox" id="f-rule"> Always file this merchant under this category</label>' +
     '<p class="small muted" id="f-hint">Use a negative amount for a refund.</p>' +
     '<div class="btns"><button class="btn" data-act="save-tx" data-id="' + esc(id) + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button><button class="btn danger" data-act="del-tx" data-id="' + esc(id) + '">Delete</button></div></div>');
@@ -2141,7 +2221,7 @@ function doAddFromTap(p) {
   mutate(function () {
     const m = L.cleanMerchant(p.merchant);
     f = tripFields(p.amount, p.cur || defaultEntryCur(), p.date, cat !== 'Income');
-    addTx(Object.assign({ id: L.uid(), d: p.date, m: m, c: cat, src: 'tap' }, f));
+    addTx(Object.assign({ id: L.uid(), d: p.date, m: m, c: cat, src: 'tap' }, p.card ? { card: p.card } : {}, f));
     S.profile.taps = (S.profile.taps || []).concat([p.id]).slice(-100);
     markProfile();
     toast('Logged ' + m + ' ' + (f.oc ? moneyIn(f.oa, f.oc, true) : money(p.amount, true)) + ' as ' + cat);
@@ -2199,6 +2279,12 @@ function onAction(act, el) {
       toast('Updated ' + n + (n === 1 ? ' entry' : ' entries'));
       break;
     }
+    case 'cc-paid': mutate(function () {
+      const c = S.profile.credit = Object.assign({ match: 'credit', billDay: 8, paid: {} }, S.profile.credit || {});
+      c.paid = Object.assign({}, c.paid);
+      if (el.dataset.on === '1') c.paid[el.dataset.key] = true; else delete c.paid[el.dataset.key];
+      markProfile();
+    }); render(); break;
     case 'edit-tx': if (demo) { toast('These are examples. Add an expense or load your ledger file first.'); break; } txSheet(el.dataset.id); break;
     case 'sheet-close': closeSheet(); break;
     case 'save-tx': saveTx(el.dataset.id); break;
@@ -2486,6 +2572,7 @@ function saveTx(id) {
     const t = f.t;
     t.m = m; t.d = d; t.c = c; t.a = c === 'Income' ? -Math.abs(a) : a;
     const pin = val('f-tr'); if (pin === 'auto') delete t.pin; else t.pin = pin;
+    const cd = val('f-card').trim(); if (cd) t.card = cd; else delete t.card;
     syncTx(t);
     if (newK !== oldK) { f.arr.splice(f.j, 1); (S.months[newK] = S.months[newK] || []).push(t); markMonth(oldK); }
     markMonth(newK);
@@ -2561,7 +2648,15 @@ document.addEventListener('change', function (e) {
     render(); return;
   }
   if (id === 'currency') { mutate(function () { S.profile.currency = el.value; markProfile(); }); render(); return; }
-  if (id === 'applink') { mutate(function () { S.profile.appLink = el.value.trim().split('#')[0]; markProfile(); }); const t = $('#tmpl'); if (t) t.textContent = (S.profile.appLink || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]'; return; }
+  if (id === 'cc-day' || id === 'cc-match') {
+    mutate(function () {
+      const c = S.profile.credit = Object.assign({ match: 'credit', billDay: 8, paid: {} }, S.profile.credit || {});
+      if (id === 'cc-day') { const v = Math.round(parseFloat(el.value)); if (v >= 1 && v <= 28) c.billDay = v; } else c.match = el.value.trim();
+      markProfile();
+    });
+    return;
+  }
+  if (id === 'applink') { mutate(function () { S.profile.appLink = el.value.trim().split('#')[0]; markProfile(); }); const t = $('#tmpl'); if (t) t.textContent = (S.profile.appLink || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]'; return; }
   if (bind === 't-kind') { const per = el.value === 'personal'; $('#t-biz').hidden = per; $('#t-per').hidden = !per; return; }
   if (id === 'o-cur') { IMP.cur = el.value; return; }
   if (id === 'o-date' || id === 'o-sign') { IMP.opts.dateFmt = val('o-date') || 'auto'; if ($('#o-sign')) IMP.opts.sign = val('o-sign'); runParse(); renderImpBox(); return; }
