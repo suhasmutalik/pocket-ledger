@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:02'; window.__BID__ = '2026-11-06 09:02:46';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:18'; window.__BID__ = '2026-11-06 09:18:25';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3010,15 +3010,32 @@ function calendarHTML() {
     '<div class="cal-g">' + WD.map(function (w) { return '<span class="cal-w">' + w + '</span>'; }).join('') + cells + '</div>' +
     '<div class="cal-key small muted"><i class="dt b"></i> payment <i class="dt n"></i> note <i class="dt pay"></i> salary <i class="dt cc"></i> credit card</div></div></section>' + sel + '<section>' + billDaysHTML() + '</section>';
 }
+function billMonths() {
+  const r = L.periodRange(L.periodKeyOf(L.today()));
+  const a = r.start.slice(0, 7);
+  return a === CAL_KEY ? [CAL_KEY] : [a, CAL_KEY];
+}
+/* Put this bill's deductions on its real date: this salary month and the month it started in. */
+function relocateBill(b) {
+  const today = L.today();
+  const p = S.profile;
+  p.posted = p.posted || [];
+  billMonths().forEach(function (mk) {
+    const arr = S.months[mk] = S.months[mk] || [];
+    for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].src === 'bill' && arr[i].bid === b.id) arr.splice(i, 1); }
+    p.posted = p.posted.filter(function (k) { return k !== mk + '|' + b.id; });
+    const d = mk + '-' + String(Math.min(b.day, L.daysInMonth(mk))).padStart(2, '0');
+    if (d <= today) { arr.push({ id: L.uid(), d: d, m: b.name, a: b.amount, c: b.cat, src: 'bill', bid: b.id }); p.posted.push(mk + '|' + b.id); }
+    markMonth(mk);
+  });
+}
 function setBillDay(id, day) {
   mutate(function () {
     const b = (S.profile.bills || []).filter(function (x) { return x.id === id; })[0];
     if (!b || b.day === day) return;
     b.day = day;
-    const arr = S.months[CAL_KEY] || [];
-    for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].src === 'bill' && arr[i].bid === id) arr.splice(i, 1); }
-    S.profile.posted = (S.profile.posted || []).filter(function (k) { return k !== CAL_KEY + '|' + id; });
-    markMonth(CAL_KEY); markProfile(); ensureBills(); syncAll();
+    relocateBill(b);
+    markProfile(); syncAll();
   });
 }
 function billDaysHTML() {
@@ -3060,6 +3077,14 @@ function ensureEvents() {
     });
   });
   if (changed) { p.posted = p.posted.slice(-600); Object.keys(keys).forEach(markMonth); markProfile(); }
+}
+function repairBills() {
+  const p = S.profile;
+  if (demo || p.billsFixed || !(p.bills || []).length) return;
+  mutate(function () {
+    p.bills.filter(function (b) { return b.cat !== 'Transfer' && b.day !== 1; }).forEach(relocateBill);
+    p.billsFixed = true; markProfile();
+  });
 }
 function ensureBills() {
   const p = S.profile, bills = p.bills || [];
@@ -3164,7 +3189,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  ensureBills(); ensureEvents();
+  repairBills(); ensureBills(); ensureEvents();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
