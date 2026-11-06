@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 12:04'; window.__BID__ = '2026-11-06 12:04:40';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 13:01'; window.__BID__ = '2026-11-06 13:01:15';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3464,10 +3464,16 @@ document.addEventListener('change', function (e) {
   if (bind === 'imp-cat') { IMP.res.rows[+el.dataset.i].c = el.value; return; }
 });
 
+function badTapNote(h) {
+  if (!/^#?tap/i.test(h || '')) return;
+  let raw = h; try { raw = decodeURIComponent(h); } catch (e) { /* keep */ }
+  openSheet('<h3>I could not read that link</h3><div class="stack"><p class="small muted">The Shortcut sent this. Send a screenshot of it to Claude so it can be fixed. Nothing was added.</p><div class="codebox">' + esc(raw) + '</div><div class="btns"><button class="btn" data-act="sheet-close">Close</button></div></div>');
+}
 function route() {
   const h = location.hash;
   const tap = L.parseTapHash(h);
   if (tap) { if (!loaded) { pendingHash = tap; return; } doAddFromTap(tap); return; }
+  badTapNote(h);
   const name = h.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0 && name !== tab) { tab = name; render(); }
 }
@@ -3488,7 +3494,7 @@ async function boot() {
   render();
   const tap = pendingHash || L.parseTapHash(location.hash);
   pendingHash = null;
-  if (tap) doAddFromTap(tap);
+  if (tap) doAddFromTap(tap); else badTapNote(location.hash);
 }
 boot();
 })();
