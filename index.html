@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 11:24'; window.__BID__ = '2026-11-06 11:24:08';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 12:04'; window.__BID__ = '2026-11-06 12:04:40';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -753,9 +753,10 @@ function detectRecurring(rows, bills) {
     g.forEach(function (r) { months[r.d.slice(0, 7)] = (months[r.d.slice(0, 7)] || 0) + 1; });
     const nm = Object.keys(months).length;
     if (nm < 2 || g.length > nm * 1.5) return;
-    const amts = g.map(function (r) { return r.a; }).sort(function (a, b) { return a - b; });
-    const med = amts[Math.floor(amts.length / 2)];
-    if (amts.some(function (a) { return Math.abs(a - med) > Math.max(1, med * 0.15); })) return;
+    /* the latest payments must agree with each other, so a price rise or a new rent still counts */
+    const tail = g.slice(-3).map(function (r) { return r.a; });
+    const lastA = tail[tail.length - 1];
+    if (tail.length >= 2 && Math.abs(tail[tail.length - 2] - lastA) > Math.max(1, lastA * 0.15)) return;
     const last = g[g.length - 1];
     found.push({ name: last.m, amount: last.a, day: +last.d.slice(8), cat: last.c === 'Income' ? 'Other' : last.c, bank: last.bank || '', months: nm, bill: null, key: k });
   });
@@ -2524,12 +2525,12 @@ function renderImpBox() {
 }
 function recHTML() {
   const rec = IMP.rec;
-  if (!rec || !rec.found.length) return '<div class="note">No monthly fixed costs found. They need at least 2 months of statements, so download 3 months from each bank.</div>';
+  if (!rec || (!rec.found.length && !rec.missing.length)) return '<div class="note">No monthly fixed costs found. They need at least 2 months of statements, so download 3 months from each bank.</div>';
   return '<div class="card pad stack"><b>Monthly fixed costs found</b><p class="small muted">Tick the ones to put in your budget. Where a matching bill exists, it is replaced with the real name, amount and day.</p>' +
     rec.found.map(function (f, i) {
       return '<label class="inline"><input type="checkbox" data-bind="rec-use" data-i="' + i + '"' + (f.use ? ' checked' : '') + '> <span>' + esc(f.name) + ': ' + money(f.amount, true) + ' on day ' + f.day + ' (' + f.bank + ', ' + f.months + ' months)<br><small class="muted">' + (f.bill ? 'replaces ' + esc(f.bill.name) + ', ' + money(f.bill.amount, true) + ' on day ' + f.bill.day : 'new bill') + '</small></span></label>';
     }).join('') +
-    (rec.missing.length ? '<p class="small muted">Not seen in the statements, left as they are: ' + rec.missing.map(function (b) { return esc(b.name); }).join(', ') + '.</p>' : '') +
+    (rec.missing.length ? '<b>Not seen in the statements</b><p class="small muted">Tick any that are outdated to delete them from your budget. Entries already posted stay in your history.</p>' + rec.missing.map(function (b, i) { return '<label class="inline"><input type="checkbox" data-bind="rec-del" data-i="' + i + '"' + (b.del ? ' checked' : '') + '> <span>' + esc(b.name) + ': ' + money(b.amount, true) + ' on day ' + b.day + '</span></label>'; }).join('') : '') +
     '<div class="btns"><button class="btn" data-act="rec-apply">Update budget</button></div></div>';
 }
 function renderCmp() {
@@ -3092,9 +3093,10 @@ function onAction(act, el) {
     }
     case 'rec-apply': {
       const picks = (IMP && IMP.rec ? IMP.rec.found : []).filter(function (f) { return f.use; });
-      if (!picks.length) { toast('Tick at least one'); break; }
+      const dels = (IMP && IMP.rec ? IMP.rec.missing : []).filter(function (b) { return b.del; }).map(function (b) { return b.id; });
+      if (!picks.length && !dels.length) { toast('Tick at least one'); break; }
       mutate(function () {
-        S.profile.bills = S.profile.bills || [];
+        S.profile.bills = (S.profile.bills || []).filter(function (b) { return dels.indexOf(b.id) < 0; });
         picks.forEach(function (f) {
           const acct = f.bank === 'ABN' ? 'abn' : 'other';
           let b = f.bill && S.profile.bills.filter(function (x) { return x.id === f.bill.id; })[0];
@@ -3104,7 +3106,7 @@ function onAction(act, el) {
         });
         markProfile(); syncAll();
       });
-      toast('Budget updated: ' + picks.length); IMP = null; render(); break;
+      toast('Budget updated: ' + picks.length + ' changed, ' + dels.length + ' deleted'); IMP = null; render(); break;
     }
     case 'cmp-run': {
       const read = function (id) {
@@ -3456,6 +3458,7 @@ document.addEventListener('change', function (e) {
   if (bind === 'limit') { const v = parseFloat(el.value); mutate(function () { const b = S.profile.budgets[el.dataset.cat] || {}; b.limit = isNaN(v) || v < 0 ? 0 : v; b.auto = false; S.profile.budgets[el.dataset.cat] = b; markProfile(); }); render(); return; }
   if (bind === 'type') { mutate(function () { const b = S.profile.budgets[el.dataset.cat] || {}; b.type = el.value; S.profile.budgets[el.dataset.cat] = b; markProfile(); }); render(); return; }
   if (bind === 'sav') { const v = parseFloat(el.value); mutate(function () { S.profile.sav = { auto: false, value: isNaN(v) || v < 0 ? 0 : v }; markProfile(); }); render(); return; }
+  if (bind === 'rec-del') { IMP.rec.missing[+el.dataset.i].del = el.checked; return; }
   if (bind === 'rec-use') { IMP.rec.found[+el.dataset.i].use = el.checked; return; }
   if (bind === 'imp-inc') { IMP.res.rows[+el.dataset.i].inc = el.checked; updateImpCount(); return; }
   if (bind === 'imp-cat') { IMP.res.rows[+el.dataset.i].c = el.value; return; }
