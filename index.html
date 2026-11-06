@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 13:53'; window.__BID__ = '2026-11-06 13:53:25';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 14:57'; window.__BID__ = '2026-11-06 14:57:39';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1510,7 +1510,7 @@ let saveTimer = null;
 function markProfile() { dirty.profile = true; sched(); }
 function markMonth(k) { dirty.months[k] = true; dirty.profile = true; sched(); }
 function sched() { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 350); setNote('Saving'); }
-function setNote(s) { saveNote = s; const el = $('#savenote'); if (el) el.textContent = s; }
+function setNote(s) { saveNote = s; const el = $('#savenote'); if (el) el.textContent = (s ? s + ' \u00b7 ' : '') + (window.__BUILD__ ? 'v ' + window.__BUILD__ : ''); }
 async function flush() {
   if (saving) { sched(); return; }
   saving = true;
