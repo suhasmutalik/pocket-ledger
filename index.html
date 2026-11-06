@@ -383,7 +383,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true;</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 00:01';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2143,7 +2143,7 @@ function backupText() {
 function noteBackup() { try { localStorage.setItem(BK_KEY, L.today()); } catch (e) { /* ignore */ } updateBanner(); }
 function backupHTML() {
   const lb = lastBackup();
-  return '<section><h2>Backup</h2><div class="card pad stack">' +
+  return '<section><p class="small muted" style="text-align:center">App version: ' + (window.__BUILD__ || 'Claude page') + '</p></section>' + '<section><h2>Backup</h2><div class="card pad stack">' +
     '<p class="small muted">' + (OFFLINE ? 'Your ledger is saved only on this phone. Make a backup now and then, so a lost phone or a deleted app does not take it with it.' : 'Copy your whole ledger as text. You can paste it into the offline copy of this app to move everything across.') + (lb ? ' Last backup: ' + L.dateLabel(lb) + ' ' + lb.slice(0, 4) + '.' : '') + '</p>' +
     '<div class="btns">' + (OFFLINE ? '<button class="btn" data-act="backup-share">Save backup file</button>' : '') + '<button class="btn ghost" data-act="backup-copy">Copy backup text</button></div></div></section>' +
     (S.profile.cardsTagged || demo ? '' : '<section><h2>Older entries</h2><div class="card pad stack"><p class="small muted">Your sheet listed which card paid for each entry. This adds those card names to your older entries, so the credit card totals include them.</p><div class="btns"><button class="btn" data-act="tag-cards">Add card names</button></div></div></section>') +
