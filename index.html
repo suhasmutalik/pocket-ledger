@@ -399,7 +399,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:41'; window.__BID__ = '2026-11-06 09:41:28';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 09:53'; window.__BID__ = '2026-11-06 09:53:10';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -638,10 +638,10 @@ function parseStatement(text, opts, rules, existing) {
   let dateCol = find(/trans.*date|transactiedatum|post.*date|^date|^datum/);
   if (dateCol < 0) dateCol = find(/date|datum|posted/);
   const descCol = find(/descr|omschrijving|merchant|payee|memo|narrat|detail|name|naam|particulars|reference/, dateCol);
-  const abCol = find(/^af bij|^af\/bij/);
+  const abCol = find(/^af bij|^af\/bij|^debit\s*\/\s*credit|^credit\s*\/\s*debit/);
   let amtCol = find(/^amount|amt|^value|^sum|^bedrag/);
-  const debCol = find(/debit|withdraw|paid out|money out|outflow|spent/);
-  const credCol = find(/credit|deposit|paid in|money in|inflow|received/);
+  let debCol = find(/debit|withdraw|paid out|money out|outflow|spent/, abCol);
+  let credCol = find(/credit|deposit|paid in|money in|inflow|received/, abCol);
   let mode = 'single';
   if (debCol >= 0 && credCol >= 0) mode = 'split';
   else if (amtCol < 0 && debCol >= 0) { amtCol = debCol; mode = 'single'; }
@@ -666,7 +666,7 @@ function parseStatement(text, opts, rules, existing) {
       a = (isNaN(de) ? 0 : Math.abs(de)) - (isNaN(cr) ? 0 : Math.abs(cr));
     } else {
       let v = parseMoney(r[amtCol]);
-      if (abCol >= 0 && !isNaN(v)) { v = Math.abs(v); a = /^bij/i.test(String(r[abCol]).trim()) ? -v : v; }
+      if (abCol >= 0 && !isNaN(v)) { v = Math.abs(v); a = /^(bij|credit)/i.test(String(r[abCol]).trim()) ? -v : v; }
       else a = isNaN(v) ? NaN : (sign === 'negspend' ? -v : v);
     }
     if (!d || isNaN(a) || a === 0) { skipped++; return; }
