@@ -419,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:17'; window.__BID__ = '2026-11-06 17:17:22';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:39'; window.__BID__ = '2026-11-06 17:39:11';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -798,6 +798,33 @@ function detectRecurring(rows, bills) {
   found.sort(function (a, b) { return a.day - b.day; });
   const missing = (bills || []).filter(function (b) { return !used[b.id] && b.cat !== 'Transfer'; });
   return { found: found, missing: missing };
+}
+
+
+/* Turn what Safari heard ("Blue Bottle four fifty") into quick-add text ("Blue Bottle 4.50") */
+function normalizeSpoken(text) {
+  const U = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+  const TN = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+  const words = String(text || '').toLowerCase().replace(/[€$£]/g, ' ').replace(/[,.](?=\s|$)/g, '').split(/\s+/).filter(Boolean);
+  const out = []; let run = null;
+  function flush() { if (run) { out.push(String(run.total + run.cur)); run = null; } }
+  words.forEach(function (w) {
+    if (w in U || w in TN || w === 'hundred') {
+      if (!run) run = { total: 0, cur: 0, last: '' };
+      if (w === 'hundred') { run.cur = (run.cur || 1) * 100; run.last = 'h'; return; }
+      if (w in TN) {
+        if (run.cur > 0 && run.cur < 10 && run.last === 'u') { flush(); run = { total: 0, cur: 0, last: '' }; }
+        run.cur += TN[w]; run.last = 't'; return;
+      }
+      if (run.last === 'u') { flush(); run = { total: 0, cur: 0, last: '' }; }
+      run.cur += U[w]; run.last = 'u'; return;
+    }
+    flush(); out.push(w);
+  });
+  flush();
+  let t = out.join(' ').replace(/\b(euros?|dollars?|bucks|cents?|and|spent|paid|bought|at|for|on|i|a|an|the)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  t = t.replace(/(\d+)\s+(\d{2})(?=\s|$)/, '$1.$2');
+  return t.replace(/\b([a-z])/g, function (m) { return m.toUpperCase(); });
 }
 
 /* ---------- Apple Pay link and quick add ---------- */
@@ -1382,7 +1409,7 @@ const api = {
   FIXED: FIXED, VARIABLE: VARIABLE, SPEND_CATS: SPEND_CATS, ALL_CATS: ALL_CATS, DEFAULT_TYPE: DEFAULT_TYPE,
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
-  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
+  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, normalizeSpoken: normalizeSpoken, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
   daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
@@ -2570,7 +2597,7 @@ function addHTML() {
   const link = S.profile.appLink || '';
   const tmpl = (link || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]';
   return '<section><h2>Quick add</h2><div class="card pad stack"><label>Merchant and amount<input id="qa" type="text" placeholder="Blue Bottle 5.50" autocomplete="off"></label>' +
-    '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button></div></div></section>' +
+    '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button><button class="btn ghost" data-act="qa-speak" id="qaspeak">Speak</button></div><div class="small muted" id="qahint">Tap Speak and say, for example, Blue Bottle five fifty.</div></div></section>' +
     '<section><h2>Add with details</h2><div class="card pad stack">' +
     '<div class="grid2"><label>Amount<input id="n-a" type="number" inputmode="decimal" step="0.01" placeholder="0.00"></label><label>Date<input id="n-d" type="date" value="' + L.today() + '"></label></div>' +
     (S.profile.fx && S.profile.fx.cur ? '<label>Paid in<select id="n-cur">' + [S.profile.currency, S.profile.fx.cur].map(function (c) { return '<option' + (c === defaultEntryCur() ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label><p class="small muted">An entry in the second currency goes to your trip.</p>' : '') +
@@ -2954,6 +2981,28 @@ function onAction(act, el) {
       if (el.dataset.armed !== '1') { el.dataset.armed = '1'; el.textContent = 'Tap again to delete'; break; }
       mutate(function () { const f = findTx(el.dataset.id); if (f) { f.arr.splice(f.j, 1); markMonth(f.k); } });
       closeSheet(); render(); toast('Deleted'); break;
+    case 'qa-speak': {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const hint = $('#qahint'), btn = $('#qaspeak');
+      if (!SR) { if (hint) hint.textContent = 'Speech is not available in this browser. Use the keyboard microphone key instead.'; break; }
+      if (window.__rec) { try { window.__rec.stop(); } catch (e) { /* ignore */ } break; }
+      const r = new SR();
+      window.__rec = r;
+      r.lang = navigator.language || 'en-US'; r.interimResults = false; r.maxAlternatives = 1;
+      const done = function () { window.__rec = null; if (btn) btn.textContent = 'Speak'; };
+      r.onstart = function () { if (btn) btn.textContent = 'Listening... tap to stop'; if (hint) hint.textContent = 'Listening...'; };
+      r.onresult = function (ev) {
+        const heard = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
+        const t = L.normalizeSpoken(heard);
+        const q = $('#qa'); if (q) q.value = t;
+        const ok = L.parseQuick(t);
+        if (hint) hint.textContent = 'Heard: ' + heard + (ok ? '. Check it, then tap Add expense.' : '. I could not find an amount. Edit it, then tap Add expense.');
+      };
+      r.onerror = function (ev) { if (hint) hint.textContent = ev && ev.error === 'not-allowed' ? 'Microphone access is off. Allow it for Safari in Settings, or use the keyboard microphone key.' : 'Could not hear that (' + ((ev && ev.error) || 'error') + '). Try again.'; done(); };
+      r.onend = done;
+      try { r.start(); } catch (e) { done(); if (hint) hint.textContent = 'Could not start the microphone.'; }
+      break;
+    }
     case 'quick-add': {
       const q = L.parseQuick(val('qa'));
       if (!q) { toast('Enter a merchant and an amount, like Blue Bottle 5.50'); break; }
