@@ -419,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:39'; window.__BID__ = '2026-11-06 17:39:11';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:42'; window.__BID__ = '2026-11-06 17:42:10';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2988,17 +2988,25 @@ function onAction(act, el) {
       if (window.__rec) { try { window.__rec.stop(); } catch (e) { /* ignore */ } break; }
       const r = new SR();
       window.__rec = r;
-      r.lang = navigator.language || 'en-US'; r.interimResults = false; r.maxAlternatives = 1;
-      const done = function () { window.__rec = null; if (btn) btn.textContent = 'Speak'; };
-      r.onstart = function () { if (btn) btn.textContent = 'Listening... tap to stop'; if (hint) hint.textContent = 'Listening...'; };
-      r.onresult = function (ev) {
-        const heard = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
+      r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1;
+      let heard = '', tm = null;
+      const finish = function () {
         const t = L.normalizeSpoken(heard);
-        const q = $('#qa'); if (q) q.value = t;
-        const ok = L.parseQuick(t);
-        if (hint) hint.textContent = 'Heard: ' + heard + (ok ? '. Check it, then tap Add expense.' : '. I could not find an amount. Edit it, then tap Add expense.');
+        const q = $('#qa'); if (q && heard.trim()) q.value = t;
+        const ok = heard.trim() && L.parseQuick(t);
+        if (hint) hint.textContent = heard.trim() ? 'Heard: ' + heard.trim() + (ok ? '. Check it, then tap Add expense.' : '. I could not find an amount. Edit it, then tap Add expense.') : 'I did not hear anything. Tap Speak and try again.';
       };
-      r.onerror = function (ev) { if (hint) hint.textContent = ev && ev.error === 'not-allowed' ? 'Microphone access is off. Allow it for Safari in Settings, or use the keyboard microphone key.' : 'Could not hear that (' + ((ev && ev.error) || 'error') + '). Try again.'; done(); };
+      const done = function () { if (tm) clearTimeout(tm); if (window.__rec) { window.__rec = null; finish(); } if (btn) btn.textContent = 'Speak'; };
+      const arm = function () { if (tm) clearTimeout(tm); tm = setTimeout(function () { try { r.stop(); } catch (e) { /* ignore */ } }, 2200); };
+      r.onstart = function () { if (btn) btn.textContent = 'Listening... tap to stop'; if (hint) hint.textContent = 'Listening... say the shop and the amount.'; arm(); };
+      r.onresult = function (ev) {
+        let t = '';
+        for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript + ' ';
+        heard = t;
+        if (hint) hint.textContent = 'Hearing: ' + t.trim();
+        arm();
+      };
+      r.onerror = function (ev) { window.__rec = null; if (tm) clearTimeout(tm); if (btn) btn.textContent = 'Speak'; if (hint) hint.textContent = ev && ev.error === 'not-allowed' ? 'Microphone access is off. Allow it for Safari in Settings, or use the keyboard microphone key.' : ev && ev.error === 'no-speech' ? 'I did not hear anything. Tap Speak and try again.' : 'Could not hear that (' + ((ev && ev.error) || 'error') + '). Try again.'; };
       r.onend = done;
       try { r.start(); } catch (e) { done(); if (hint) hint.textContent = 'Could not start the microphone.'; }
       break;
