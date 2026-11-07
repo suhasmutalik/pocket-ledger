@@ -419,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:42'; window.__BID__ = '2026-11-06 17:42:10';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:46'; window.__BID__ = '2026-11-06 17:46:31';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2985,30 +2985,43 @@ function onAction(act, el) {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       const hint = $('#qahint'), btn = $('#qaspeak');
       if (!SR) { if (hint) hint.textContent = 'Speech is not available in this browser. Use the keyboard microphone key instead.'; break; }
-      if (window.__rec) { try { window.__rec.stop(); } catch (e) { /* ignore */ } break; }
-      const r = new SR();
-      window.__rec = r;
-      r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1;
-      let heard = '', tm = null;
-      const finish = function () {
+      if (window.__rec) { window.__stopped = true; try { window.__rec.stop(); } catch (e) { /* ignore */ } break; }
+      window.__stopped = false;
+      let heard = '', errMsg = '', rounds = 0, aborts = 0;
+      const say = function (t) { const h = $('#qahint'); if (h) h.textContent = t; };
+      const finishAll = function () {
+        window.__rec = null;
+        const b2 = $('#qaspeak'); if (b2) b2.textContent = 'Speak';
         const t = L.normalizeSpoken(heard);
         const q = $('#qa'); if (q && heard.trim()) q.value = t;
-        const ok = heard.trim() && L.parseQuick(t);
-        if (hint) hint.textContent = heard.trim() ? 'Heard: ' + heard.trim() + (ok ? '. Check it, then tap Add expense.' : '. I could not find an amount. Edit it, then tap Add expense.') : 'I did not hear anything. Tap Speak and try again.';
+        if (heard.trim()) { const ok = L.parseQuick(t); say('Heard: ' + heard.trim() + (ok ? '. Check it, then tap Add expense.' : '. I could not find an amount. Edit it, then tap Add expense.')); }
+        else if (errMsg === 'not-allowed' || errMsg === 'service-not-allowed') say('Microphone access is off. Allow it for Safari in Settings, or use the keyboard microphone key.');
+        else if (errMsg && errMsg !== 'no-speech' && errMsg !== 'aborted') say('Could not hear that (' + errMsg + '). Try again.');
+        else if (errMsg === 'aborted') say('The microphone was interrupted. Tap Speak again, or use the keyboard microphone key.');
+        else say('I did not hear anything. Tap Speak and try again.');
       };
-      const done = function () { if (tm) clearTimeout(tm); if (window.__rec) { window.__rec = null; finish(); } if (btn) btn.textContent = 'Speak'; };
-      const arm = function () { if (tm) clearTimeout(tm); tm = setTimeout(function () { try { r.stop(); } catch (e) { /* ignore */ } }, 2200); };
-      r.onstart = function () { if (btn) btn.textContent = 'Listening... tap to stop'; if (hint) hint.textContent = 'Listening... say the shop and the amount.'; arm(); };
-      r.onresult = function (ev) {
-        let t = '';
-        for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript + ' ';
-        heard = t;
-        if (hint) hint.textContent = 'Hearing: ' + t.trim();
-        arm();
+      const begin = function () {
+        const r = new SR();
+        window.__rec = r;
+        r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+        let seg = '';
+        r.onstart = function () { const b2 = $('#qaspeak'); if (b2) b2.textContent = 'Listening... tap to stop'; if (!heard) say('Listening... say the shop and the amount.'); };
+        r.onresult = function (ev) {
+          seg = '';
+          for (let i = 0; i < ev.results.length; i++) seg += ev.results[i][0].transcript + ' ';
+          say('Hearing: ' + (heard + ' ' + seg).trim());
+        };
+        r.onerror = function (ev) { errMsg = (ev && ev.error) || 'error'; };
+        r.onend = function () {
+          if (seg.trim()) { heard = (heard + ' ' + seg).trim(); errMsg = ''; }
+          if (window.__stopped) { finishAll(); return; }
+          if (errMsg === 'aborted' && !heard && aborts < 2) { aborts++; errMsg = ''; setTimeout(function () { if (!window.__stopped) { try { begin(); } catch (e) { finishAll(); } } }, 350); return; }
+          if (seg.trim() && rounds < 4 && !errMsg) { rounds++; setTimeout(function () { if (!window.__stopped) { try { begin(); } catch (e) { finishAll(); } } else finishAll(); }, 150); return; }
+          finishAll();
+        };
+        r.start();
       };
-      r.onerror = function (ev) { window.__rec = null; if (tm) clearTimeout(tm); if (btn) btn.textContent = 'Speak'; if (hint) hint.textContent = ev && ev.error === 'not-allowed' ? 'Microphone access is off. Allow it for Safari in Settings, or use the keyboard microphone key.' : ev && ev.error === 'no-speech' ? 'I did not hear anything. Tap Speak and try again.' : 'Could not hear that (' + ((ev && ev.error) || 'error') + '). Try again.'; };
-      r.onend = done;
-      try { r.start(); } catch (e) { done(); if (hint) hint.textContent = 'Could not start the microphone.'; }
+      try { begin(); } catch (e) { window.__rec = null; say('Could not start the microphone.'); }
       break;
     }
     case 'quick-add': {
