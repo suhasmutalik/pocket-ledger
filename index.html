@@ -502,6 +502,9 @@ details.card > summary::after { border-color: var(--muted); }
 #view.enter .flow { animation: fadein .8s ease-out .1s both; }
 @media (prefers-reduced-motion: reduce) { #view.enter *, .btn, .tabs button { animation: none !important; transition: none !important; } }
 
+.chart .yi { fill: var(--g1); } .chart .ys { fill: var(--fixed); }
+.tr { font-size: 12px; margin-left: 4px; color: var(--muted); } .tr.up { color: var(--bad); } .tr.dn { color: var(--good); }
+
 </style>
 </head>
 <body>
@@ -514,7 +517,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 20:59'; window.__BID__ = '2026-11-06 20:59:06';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 21:03'; window.__BID__ = '2026-11-06 21:03:42';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -796,7 +799,7 @@ function parseStatement(text, opts, rules, existing) {
     t.dup = !!(existing[txKey(t)] || existing['da|' + t.d + '|' + Number(t.a).toFixed(2)]);
     out.push(t);
   });
-  return { rows: out, skipped: skipped, detected: { dateFmt: dfmt, sign: mode === 'single' ? sign : 'split', mode: mode } };
+  return { rows: out, skipped: skipped, detected: { dateFmt: dfmt, sign: mode === 'single' ? sign : 'split', mode: mode, abn: abn } };
 }
 
 
@@ -842,6 +845,64 @@ function compareStatements(ing, abn, ledger) {
   return { rows: rows, count: count };
 }
 
+
+/* Summarise a long run of bank rows (statuses from compareStatements) by salary month.
+   Own-account moves and card bill payments are left out. Only totals are kept, not the rows. */
+function analyzeHistory(rows, profile) {
+  profile = profile || {};
+  const use = (rows || []).filter(function (r) { return r.status !== 'transfer' && r.status !== 'card' && r.c !== 'Transfer'; });
+  if (!use.length) return null;
+  let minD = use[0].d, maxD = use[0].d;
+  const per = {}, mer = {};
+  use.forEach(function (r) {
+    if (r.d < minD) minD = r.d; if (r.d > maxD) maxD = r.d;
+    const k = periodKeyOf(r.d);
+    const p = per[k] = per[k] || { inc: 0, spend: 0, fixed: 0, byCat: {} };
+    if (r.a < 0) { p.inc += -r.a; return; }
+    p.spend += r.a; p.byCat[r.c] = (p.byCat[r.c] || 0) + r.a;
+    if (typeOf(profile, r.c) === 'fixed') p.fixed += r.a;
+    const mk = norm(r.m).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).join(' ');
+    if (mk.length >= 3) { const e = mer[mk] = mer[mk] || { name: r.m, total: 0, n: 0, cat: r.c }; e.total += r.a; e.n++; }
+  });
+  const keys = Object.keys(per).sort();
+  const dn = function (x) { const q = String(x).split('-'); return Math.round(Date.UTC(+q[0], +q[1] - 1, +q[2]) / 864e5); };
+  keys.forEach(function (k, i) {
+    const R = periodRange(k), p = per[k];
+    p.partial = (i === 0 && dn(minD) - dn(R.start) > 4) || (i === keys.length - 1 && dn(R.end) - dn(maxD) > 4);
+    p.inc = Math.round(p.inc * 100) / 100; p.spend = Math.round(p.spend * 100) / 100; p.fixed = Math.round(p.fixed * 100) / 100;
+    Object.keys(p.byCat).forEach(function (c) { p.byCat[c] = Math.round(p.byCat[c] * 100) / 100; });
+  });
+  const merchants = Object.keys(mer).map(function (k) { return mer[k]; }).sort(function (a, b) { return b.total - a.total; }).slice(0, 12)
+    .map(function (e) { return { name: e.name, total: Math.round(e.total * 100) / 100, n: e.n, cat: e.cat }; });
+  const rec = detectRecurring(use, profile.bills || []).found.map(function (f) { return { name: f.name, amount: f.amount, months: f.months, cat: f.cat }; })
+    .sort(function (a, b) { return b.amount - a.amount; }).slice(0, 20);
+  return { built: maxD, from: minD, to: maxD, n: use.length, keys: keys, months: per, merchants: merchants, rec: rec };
+}
+/* Numbers for the year review, from complete months only */
+function historyStats(h) {
+  if (!h) return null;
+  const ks = h.keys.filter(function (k) { return !h.months[k].partial; });
+  if (!ks.length) return null;
+  let inc = 0, sp = 0, fx = 0, saved = 0, up = 0;
+  const cat = {};
+  ks.forEach(function (k) {
+    const p = h.months[k]; inc += p.inc; sp += p.spend; fx += p.fixed;
+    if (p.inc > p.spend) up++;
+    Object.keys(p.byCat).forEach(function (c) { cat[c] = (cat[c] || 0) + p.byCat[c]; });
+  });
+  saved = inc - sp;
+  const n = ks.length, half = Math.min(3, Math.floor(n / 2));
+  const cats = Object.keys(cat).map(function (c) {
+    let rec = 0, old = 0;
+    ks.slice(-half).forEach(function (k) { rec += h.months[k].byCat[c] || 0; });
+    ks.slice(-half * 2, -half).forEach(function (k) { old += h.months[k].byCat[c] || 0; });
+    const trend = half > 0 && old > 20 ? (rec - old) / old : null;
+    return { cat: c, total: cat[c], avg: cat[c] / n, share: sp > 0 ? cat[c] / sp : 0, trend: trend };
+  }).sort(function (a, b) { return b.total - a.total; });
+  const best = ks.slice().sort(function (a, b) { return (h.months[b].inc - h.months[b].spend) - (h.months[a].inc - h.months[a].spend); });
+  const dear = ks.slice().sort(function (a, b) { return h.months[b].spend - h.months[a].spend; });
+  return { n: n, inc: inc, spend: sp, saved: saved, rate: inc > 0 ? saved / inc : null, avgInc: inc / n, avgSp: sp / n, fixedShare: sp > 0 ? fx / sp : 0, up: up, cats: cats, bestKey: best[0], dearKey: dear[0] };
+}
 
 /* Same payee under two names (for example family members): rename to the second name */
 function applyAlias(name, aliases) {
@@ -1504,7 +1565,7 @@ const api = {
   FIXED: FIXED, VARIABLE: VARIABLE, SPEND_CATS: SPEND_CATS, ALL_CATS: ALL_CATS, DEFAULT_TYPE: DEFAULT_TYPE,
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
-  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, normalizeSpoken: normalizeSpoken, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
+  parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, analyzeHistory: analyzeHistory, historyStats: historyStats, normalizeSpoken: normalizeSpoken, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
   daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
@@ -2304,6 +2365,53 @@ function rangeControlsHTML() {
   return '<section><div class="card pad stack"><div class="grid2"><label>From<input type="date" id="rs" value="' + sp.rs + '" max="' + L.today() + '"></label><label>To<input type="date" id="re" value="' + sp.re + '" max="' + L.today() + '"></label></div>' +
     '<div class="chips">' + [['period', 'This salary month'], ['prev', 'Last salary month'], ['30', '30 days'], ['90', '3 months'], ['180', '6 months'], ['ytd', 'This year'], ['all', 'Everything']].map(function (p) { return '<button data-act="sp-preset" data-p="' + p[0] + '">' + p[1] + '</button>'; }).join('') + '</div></div></section>';
 }
+function yearReviewHTML() {
+  const h = S.profile.hist;
+  const pick = '<label>Bank files (choose several)<input id="yrfiles" type="file" multiple></label><div class="btns"><button class="btn" data-act="yr-run">Analyse my statements</button></div><div class="small muted" id="yrmsg"></div>';
+  if (!h) {
+    return '<section><h2>Year review</h2><div class="card pad stack"><b>See the last 12 to 24 months</b><span class="small muted">Choose your ING CSV files and ABN AMRO TXT files together, up to 24 months. The app finds your income, spending, fixed costs and trends. Nothing is added to your ledger, so there is no double counting.</span>' + pick + '</div></section>';
+  }
+  const st = L.historyStats(h);
+  if (!st) return '<section><h2>Year review</h2><div class="card pad stack"><span class="small muted">Not enough full months in those files. Choose files that cover at least two months.</span>' + pick + '</div></section>';
+  const keys = h.keys, nK = keys.length;
+  const W = 340, H = 176, ml = 44, mr = 6, mt = 12, mb = 24, ph = H - mt - mb, bw = (W - ml - mr) / nK;
+  const mx = niceCeil(Math.max.apply(null, keys.map(function (k) { return Math.max(h.months[k].inc, h.months[k].spend); }).concat([1])));
+  const Y = function (v) { return mt + ph * (1 - v / mx); };
+  let g = '';
+  [0, 0.5, 1].forEach(function (f) { const y = mt + ph * (1 - f); g += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (ml - 5) + '" y="' + (y + 3) + '" text-anchor="end">' + (f === 0 ? '0' : compact(mx * f)) + '</text>'; });
+  const bwid = Math.max(3, bw * 0.34);
+  keys.forEach(function (k, i) {
+    const p = h.months[k], x0 = ml + i * bw + bw * 0.12, op = p.partial ? ' opacity=".35"' : '';
+    g += '<rect class="yi" x="' + x0.toFixed(1) + '" y="' + Y(p.inc).toFixed(1) + '" width="' + bwid.toFixed(1) + '" height="' + Math.max(1, ph * p.inc / mx).toFixed(1) + '" rx="2"' + op + '/>';
+    g += '<rect class="ys" x="' + (x0 + bwid + 1.5).toFixed(1) + '" y="' + Y(p.spend).toFixed(1) + '" width="' + bwid.toFixed(1) + '" height="' + Math.max(1, ph * p.spend / mx).toFixed(1) + '" rx="2"' + op + '/>';
+    if (nK <= 13 || i % 2 === 0) g += '<text x="' + (ml + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + L.monthLabel(k).slice(0, 3) + '</text>';
+  });
+  g += '<line class="budgetline" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + Y(st.avgSp).toFixed(1) + '" y2="' + Y(st.avgSp).toFixed(1) + '"/>';
+  const top = st.cats.slice(0, 8);
+  const catRows = top.map(function (c) {
+    const tr = c.trend == null ? '' : '<span class="tr ' + (c.trend > 0.1 ? 'up' : c.trend < -0.1 ? 'dn' : '') + '">' + (c.trend > 0.1 ? '&#9650; ' : c.trend < -0.1 ? '&#9660; ' : '&#8226; ') + Math.abs(Math.round(c.trend * 100)) + '%</span>';
+    return '<div class="cat"><div class="top-row"><span>' + ce(c.cat) + '</span><span class="mono">' + money(c.total) + ' ' + tr + '</span></div>' + bar(Math.min(100, c.share * 100 / Math.max(top[0].share, 0.01) ), 'var') + '<div class="small muted mono">' + money(c.avg) + ' a month &middot; ' + Math.round(c.share * 100) + '% of spending</div></div>';
+  }).join('');
+  const merRows = (h.merchants || []).slice(0, 10).map(function (m) { return '<div class="kv"><span>' + catEmoji(m.cat) + ' ' + esc(m.name) + ' <span class="small muted">' + m.n + 'x</span></span><span class="mono">' + money(m.total) + '</span></div>'; }).join('');
+  const recRows = (h.rec || []).slice(0, 12).map(function (r) { return '<div class="kv"><span>' + catEmoji(r.cat) + ' ' + esc(r.name) + ' <span class="small muted">' + r.months + ' months</span></span><span class="mono">' + money(r.amount) + '</span></div>'; }).join('');
+  const hl = [];
+  hl.push('You saved money in <b>' + st.up + ' of ' + st.n + '</b> months.');
+  hl.push('Most expensive month: <b>' + L.periodLabel(st.dearKey) + '</b>, ' + money(h.months[st.dearKey].spend) + '.');
+  hl.push('Best month: <b>' + L.periodLabel(st.bestKey) + '</b>, with ' + money(h.months[st.bestKey].inc - h.months[st.bestKey].spend) + ' left over.');
+  hl.push('Fixed costs are <b>' + Math.round(st.fixedShare * 100) + '%</b> of what you spend.');
+  const bud = (S.profile.bills || []).reduce(function (a, b) { return a + (b.amount || 0); }, 0);
+  if (bud > 0) hl.push('Your bills in Budget add up to ' + money(bud) + ' a month. Your typical month in the statements is ' + money(st.avgSp) + '.');
+  return '<section><h2>Year review</h2><div class="card pad stack"><div class="small muted">' + L.dateLabel(h.from) + ' ' + h.from.slice(0, 4) + ' to ' + L.dateLabel(h.to) + ' ' + h.to.slice(0, 4) + ' &middot; ' + st.n + ' full months &middot; ' + h.n + ' payments</div>' +
+    '<div class="sums" style="margin:0 -16px"><div><span class="k">Income</span><span class="v">' + money(st.inc) + '</span></div><div><span class="k">Spent</span><span class="v">' + money(st.spend) + '</span></div><div><span class="k">Left over</span><span class="v">' + money(st.saved) + '</span></div></div>' +
+    '<div class="chips3"><div><b class="mono">' + money(st.avgSp) + '</b><span>Spent a month</span></div><div><b class="mono">' + money(st.avgInc) + '</b><span>Income a month</span></div><div><b class="mono">' + (st.rate == null ? '–' : Math.round(st.rate * 100) + '%') + '</b><span>Saved</span></div></div></div></section>' +
+    '<section><h2>Income and spending by month</h2><div class="card pad stack"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Income and spending for each month">' + g + '</svg>' +
+    '<div class="legend3"><span><i class="s-l"></i>Income</span><span><i class="s-f"></i>Spending</span><span><i style="background:var(--warn)"></i>Average spending ' + money(st.avgSp) + '</span></div><div class="small muted">Faded bars are months only partly covered by your files.</div></div></section>' +
+    '<section><h2>Where it went</h2><div class="card pad stack">' + catRows + '<div class="small muted">Arrows compare the last 3 months with the 3 before.</div></div></section>' +
+    '<section><h2>Highlights</h2><div class="card pad stack">' + hl.map(function (x) { return '<div>' + x + '</div>'; }).join('') + '</div></section>' +
+    (merRows ? '<section><h2>Biggest places</h2><div class="card list">' + merRows + '</div></section>' : '') +
+    (recRows ? '<section><h2>Costs that repeat every month</h2><div class="card list">' + recRows + '</div></section>' : '') +
+    '<section><div class="card pad stack"><span class="small muted">Credit card spending is not in these files, so your real spending can be higher. Money you moved between your own accounts is left out.</span>' + pick + '<div class="btns"><button class="btn sm ghost danger" data-act="yr-clear">Remove this review</button></div></div></section>';
+}
 function insightsHTML() {
   const today = L.today(), first = L.firstTxDate(S.months);
   if (!first) return '<section><div class="card empty">Add some spending and your totals and yearly outlook appear here.</div></section>';
@@ -2362,7 +2470,7 @@ function reviewSheet(keys, auto) {
 }
 function activityHTML() {
   const seg = spSegHTML();
-  if (sp.view === 'insights') return seg + insightsHTML();
+  if (sp.view === 'insights') return seg + yearReviewHTML() + insightsHTML();
   if (sp.view === 'charts') return seg + dailyChartsHTML('run') + catBreakHTML() + flowHTML();
   const range = sp.view === 'range';
   const filters = '<section><div class="card pad stack">' +
@@ -3453,6 +3561,35 @@ function onAction(act, el) {
       if (el.dataset.armed !== '1') { el.dataset.armed = '1'; el.textContent = 'Tap again to delete'; break; }
       mutate(function () { S.profile.goals = S.profile.goals.filter(function (x) { return x.id !== el.dataset.id; }); markProfile(); });
       closeSheet(); render(); break;
+    case 'yr-run': {
+      const fl = $('#yrfiles') && $('#yrfiles').files ? Array.prototype.slice.call($('#yrfiles').files) : [];
+      const msg = $('#yrmsg');
+      if (!fl.length) { toast('Choose your bank files first'); break; }
+      if (msg) msg.textContent = 'Reading ' + fl.length + ' file' + (fl.length === 1 ? '' : 's') + '...';
+      Promise.all(fl.map(function (f) { return new Promise(function (res) { const fr = new FileReader(); fr.onload = function () { res({ n: f.name, t: String(fr.result || '') }); }; fr.onerror = function () { res({ n: f.name, t: '' }); }; fr.readAsText(f); }); })).then(function (files) {
+        const ing = [], abn = [], bad = [], seen = {};
+        files.forEach(function (f) {
+          if (!f.t.trim()) { bad.push(f.n); return; }
+          const r = L.parseStatement(f.t, { dateFmt: 'auto', sign: 'auto' }, S.profile.rules, {});
+          if (r.error) { bad.push(f.n); return; }
+          r.rows.forEach(function (x) {
+            const key = [x.d, x.a, x.m].join('|') + '|' + (r.detected.abn ? 'A' : 'I');
+            const dupKey = key; if (seen[dupKey] && seen[dupKey].f !== f.n) return;
+            seen[dupKey] = { f: f.n };
+            x.m = L.applyAlias(x.m, aliasList());
+            (r.detected.abn ? abn : ing).push(x);
+          });
+        });
+        if (!ing.length && !abn.length) { if (msg) msg.textContent = 'Could not read those files. Use the CSV from ING and the TXT from ABN AMRO.'; return; }
+        const cmp = L.compareStatements(ing, abn, []);
+        const hist = L.analyzeHistory(cmp.rows, S.profile);
+        if (!hist) { if (msg) msg.textContent = 'No payments found in those files.'; return; }
+        mutate(function () { S.profile.hist = hist; markProfile(); });
+        render(); toast('Year review ready' + (bad.length ? ' (' + bad.length + ' file skipped)' : ''));
+      });
+      break;
+    }
+    case 'yr-clear': mutate(function () { delete S.profile.hist; markProfile(); }); render(); toast('Review removed'); break;
     case 'theme-set': { try { localStorage.setItem('pl-theme', el.dataset.v); } catch (e) { /* ignore */ } applyTheme(); render(); break; }
     case 'carry-fwd': case 'carry-save': case 'carry-skip': {
       const pk = L.addMonths(viewKey, -1);
