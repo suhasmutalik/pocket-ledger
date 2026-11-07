@@ -388,6 +388,16 @@ details.card > summary::after { border-color: var(--muted); }
 .tabs button svg { width: 23px; height: 23px; } .tabs button span { font-size: 9.5px; letter-spacing: 0; }
 .dayin { width: 56px; min-height: 30px; padding: 2px 8px; text-align: center; display: inline-block; border-radius: 10px; font-size: 14px; }
 
+/* category donut */
+.donut { width: 100%; max-width: 260px; margin: 0 auto; display: block; }
+.donut .dn { cursor: pointer; transition: stroke-width .15s, opacity .15s; }
+.donut .dn.dim { opacity: .35; }
+.donut .dn-l { fill: var(--muted, #98a0ad); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.donut .dn-v { fill: var(--ink, #fff); font-size: 20px; font-weight: 600; }
+.dn-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 11px 4px; border-radius: 10px; color: var(--ink); }
+.dn-row i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.dn-row.on { background: var(--fill); }
+
 </style>
 </head>
 <body>
@@ -399,7 +409,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 16:41'; window.__BID__ = '2026-11-06 16:41:12';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:08'; window.__BID__ = '2026-11-06 17:08:19';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1842,6 +1852,39 @@ function txRow(t) {
 
 function addDaysStr(d, n) { const p = d.split('-').map(Number); const x = new Date(p[0], p[1] - 1, p[2] + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
 const chartGeo = {};
+/* ---------- where it went: interactive category donut ---------- */
+let catSel = '';
+const CAT_PAL = ['#7be3b5', '#f6c76b', '#8fb8ff', '#f08a6b', '#b79bff', '#5fd3e0', '#ef7fb0', '#c4d96a', '#9aa7b8', '#e0a35a', '#6bc3a0', '#a0a0ff'];
+function catBreakHTML() {
+  const range = sp.view === 'range';
+  let byCat, from, to;
+  if (range) { const st = L.rangeStats(S.profile, S.months, sp.rs, sp.re); byCat = st.byCat; from = sp.rs; to = sp.re; }
+  else { const r = L.periodRange(viewKey); byCat = L.totals(S.months, viewKey).byCat; from = r.start; to = r.end; }
+  const rows = Object.keys(byCat).map(function (c) { return { cat: c, v: byCat[c] }; }).filter(function (r) { return r.v > 0; }).sort(function (a, b) { return b.v - a.v; });
+  if (!rows.length) return '';
+  const total = rows.reduce(function (a, r) { return a + r.v; }, 0);
+  if (catSel && !rows.some(function (r) { return r.cat === catSel; })) catSel = '';
+  const R = 70, C = 2 * Math.PI * R;
+  let off = 0, arcs = '';
+  rows.forEach(function (r, i) {
+    const len = C * r.v / total, col = CAT_PAL[i % CAT_PAL.length];
+    const on = catSel === r.cat;
+    arcs += '<circle class="dn' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '" cx="100" cy="100" r="' + R + '" fill="none" stroke="' + col + '" stroke-width="' + (on ? 30 : 24) + '" stroke-dasharray="' + Math.max(0, len - 1.5).toFixed(2) + ' ' + (C - Math.max(0, len - 1.5)).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 100 100)"></circle>';
+    off += len;
+  });
+  const sel = rows.filter(function (r) { return r.cat === catSel; })[0];
+  const cnt = sel ? allTx().filter(function (t) { return !t.tr && t.c === sel.cat && t.d >= from && t.d <= to && t.a > 0; }).length : 0;
+  const mid = sel
+    ? '<text x="100" y="92" text-anchor="middle" class="dn-l">' + esc(sel.cat.length > 16 ? sel.cat.slice(0, 15) + '…' : sel.cat) + '</text><text x="100" y="116" text-anchor="middle" class="dn-v">' + money(sel.v) + '</text><text x="100" y="134" text-anchor="middle" class="dn-l">' + Math.round(sel.v / total * 100) + '%</text>'
+    : '<text x="100" y="94" text-anchor="middle" class="dn-l">Total</text><text x="100" y="118" text-anchor="middle" class="dn-v">' + money(total) + '</text>';
+  return '<section><h2>Where it went</h2><div class="card pad stack"><svg class="donut" viewBox="0 0 200 200" role="img" aria-label="Spending by category">' + arcs + mid + '</svg>' +
+    '<p class="small muted" style="text-align:center;margin:0">Tap a slice or a row to see it. Trips are not included.</p>' +
+    '<div class="list">' + rows.map(function (r, i) {
+      const on = catSel === r.cat;
+      return '<button class="dn-row' + (on ? ' on' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><i style="background:' + CAT_PAL[i % CAT_PAL.length] + '"></i><span>' + esc(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + Math.round(r.v / total * 100) + '%</span></span></button>';
+    }).join('') + '</div>' +
+    (sel ? '<div class="btns"><button class="btn" data-act="cat-open">See ' + cnt + (cnt === 1 ? ' entry' : ' entries') + ' for ' + esc(sel.cat) + '</button></div>' : '') + '</div></section>';
+}
 function dailyChartsHTML() {
   const range = sp.view === 'range';
   const today = L.today();
@@ -2053,7 +2096,7 @@ function activityHTML() {
     '<div style="display:flex;align-items:flex-end"><button class="btn ' + (sel.on ? '' : 'ghost') + '" style="width:100%" data-act="sel-toggle-mode">' + (sel.on ? 'Done selecting' : 'Select entries') + '</button></div></div>' +
     '<div class="muted small mono" id="actsum"></div></div></section>' +
     '<section><div class="card list" id="actList"></div></section>' + selBarHTML() + (sel.on ? '<div style="height:110px"></div>' : '');
-  return seg + (range ? rangeControlsHTML() : '') + dailyChartsHTML() + (range ? rangeSummaryHTML() : '') + filters;
+  return seg + (range ? rangeControlsHTML() : '') + dailyChartsHTML() + catBreakHTML() + (range ? rangeSummaryHTML() : '') + filters;
 }
 function actTx() {
   return sp.view === 'range' ? L.txBetween(S.months, sp.rs, sp.re) : L.txIn(S.months, viewKey);
@@ -3158,6 +3201,8 @@ function onAction(act, el) {
       });
       closeSheet(); render(); toast('Added'); break;
     }
+    case 'cat-pick': catSel = catSel === el.dataset.cat ? '' : el.dataset.cat; render(); break;
+    case 'cat-open': filt = { q: '', cat: catSel }; setTab('activity'); break;
     case 'cmp-run': {
       const read = function (id) {
         const f = $(id).files && $(id).files[0];
