@@ -549,7 +549,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 23:52'; window.__BID__ = '2026-11-06 23:52:06';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '07 Nov 11:43'; window.__BID__ = '2026-11-07 11:43:34';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1646,6 +1646,7 @@ let loaded = false;
 let tab = 'home';
 let viewKey = L.monthKey(L.today());
 let filt = { q: '', cat: '', kind: '' };
+let actSort = 'new';
 const sel = { on: false, ids: {}, shown: [] };
 const sp = { view: 'month', rs: '', re: '', scope: '12' };
 let reviewKeys = null;
@@ -2658,7 +2659,8 @@ function activityHTML() {
     '<div class="grid2"><label>Search<input id="q" type="search" placeholder="Merchant or category" value="' + esc(filt.q) + '"></label>' +
     '<label>Category<select id="fcat"><option value="">All</option>' + L.allCatsOf(S.profile).map(function (c) { return '<option' + (c === filt.cat ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label></div>' +
     '<div class="grid2"><label>Show<select id="fkind"><option value="">All entries</option><option value="trip"' + (filt.kind === 'trip' ? ' selected' : '') + '>Trip entries</option><option value="everyday"' + (filt.kind === 'everyday' ? ' selected' : '') + '>Everyday only</option></select></label>' +
-    '<div style="display:flex;align-items:flex-end"><button class="btn ' + (sel.on ? '' : 'ghost') + '" style="width:100%" data-act="sel-toggle-mode">' + (sel.on ? 'Done selecting' : 'Select entries') + '</button></div></div>' +
+    '<label>Sort by<select id="fsort">' + [['new', 'Latest first'], ['old', 'Oldest first'], ['big', 'Biggest amount'], ['small', 'Smallest amount'], ['az', 'Merchant A to Z']].map(function (x) { return '<option value="' + x[0] + '"' + (actSort === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label></div>' +
+    '<button class="btn ' + (sel.on ? '' : 'ghost') + '" style="width:100%" data-act="sel-toggle-mode">' + (sel.on ? 'Done selecting' : 'Select entries') + '</button>' +
     '<label class="inline"><input type="checkbox" id="fall"' + (filt.all ? ' checked' : '') + '> Search all months, not just this one</label><div class="muted small mono" id="actsum"></div></div></section>' +
     '<section><div class="card list" id="actList"></div></section>' + selBarHTML() + (sel.on ? '<div style="height:110px"></div>' : '');
   return seg + (range ? rangeControlsHTML() : '') + (range ? dailyChartsHTML() + catBreakHTML() + rangeSummaryHTML() : dailyChartsHTML('daily')) + filters;
@@ -2693,7 +2695,17 @@ function updateActList() {
     if (filt.kind === 'everyday' && t.tr) return false;
     if (filt.q) { const q = filt.q.toLowerCase(); if ((t.m + ' ' + t.c).toLowerCase().indexOf(q) === -1) return false; }
     return true;
-  }).sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
+  });
+  const pos = new Map(); actTx().forEach(function (t, i) { pos.set(t.id, i); });
+  const byDate = function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : (pos.get(b.id) || 0) - (pos.get(a.id) || 0); };
+  arr.sort(function (a, b) {
+    if (actSort === 'old') return -byDate(a, b);
+    if (actSort === 'big') return Math.abs(b.a) - Math.abs(a.a) || byDate(a, b);
+    if (actSort === 'small') return Math.abs(a.a) - Math.abs(b.a) || byDate(a, b);
+    if (actSort === 'az') return String(a.m).toLowerCase() < String(b.m).toLowerCase() ? -1 : String(a.m).toLowerCase() > String(b.m).toLowerCase() ? 1 : byDate(a, b);
+    return byDate(a, b);
+  });
+  const grouped = actSort === 'new' || actSort === 'old';
   let spent = 0;
   let tripSpent = 0;
   arr.forEach(function (t) { if (t.c === 'Income' || t.c === 'Transfer') return; if (t.tr) tripSpent += t.a; else spent += t.a; });
@@ -2701,10 +2713,10 @@ function updateActList() {
   let html = '', last = '';
   sel.shown = arr.slice(0, 200).map(function (t) { return t.id; });
   arr.slice(0, 200).forEach(function (t) {
-    if (t.d !== last) { last = t.d; html += '<div class="day">' + L.dateLabel(t.d) + '</div>'; }
+    if (grouped && t.d !== last) { last = t.d; html += '<div class="day">' + L.dateLabel(t.d) + '</div>'; }
     html += sel.on ? selRow(t) : txRow(t);
   });
-  if (arr.length > 200) html += '<div class="empty">Showing the latest 200. Use search to narrow down.</div>';
+  if (arr.length > 200) html += '<div class="empty">Showing the first 200. Use search to narrow down.</div>';
   $('#actList').innerHTML = html || '<div class="empty">No entries match. Tap Add to log one.</div>';
 }
 
@@ -4377,6 +4389,7 @@ document.addEventListener('change', function (e) {
   if (id === 'plan-target') { const v = parseFloat(el.value); mutate(function () { S.profile.plan = { target: isNaN(v) || v < 0 ? 0 : v }; markProfile(); }); render(); return; }
   if (id === 'rs' || id === 're') { setRange(id === 'rs' ? el.value || sp.rs : sp.rs, id === 're' ? el.value || sp.re : sp.re); render(); return; }
   if (id === 'isc') { sp.scope = el.value; render(); return; }
+  if (id === 'fsort') { actSort = el.value; updateActList(); return; }
   if (id === 'fall') { filt.all = el.checked; updateActList(); return; }
   if (id === 'fcat') { filt.cat = el.value; updateActList(); return; }
   if (id === 'fkind') { filt.kind = el.value; updateActList(); return; }
