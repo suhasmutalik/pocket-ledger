@@ -419,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:50'; window.__BID__ = '2026-11-06 17:50:53';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 19:18'; window.__BID__ = '2026-11-06 19:18:19';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2483,6 +2483,51 @@ function expectedItems() {
   });
   return { rows: rows, total: rows.reduce(function (s, r) { return s + r.amount; }, 0) };
 }
+function savingsChartsHTML() {
+  ['Total saved', 'Left over each month'].forEach(function (k) { if (!(k in foldOpen)) foldOpen[k] = true; });
+  const gs = S.profile.goals || [];
+  const total = gs.reduce(function (a, g) { return a + (Number(g.saved) || 0); }, 0);
+  const keys = [];
+  for (let i = 5; i >= 0; i--) keys.push(L.addMonths(viewKey, -i));
+  const logs = [];
+  gs.forEach(function (g) { (g.log || []).forEach(function (e) { if (e.d) logs.push({ d: e.d, a: Number(e.a) || 0 }); }); });
+  const data = keys.map(function (k) {
+    const R = L.periodRange(k), M = L.monthSummary(S.profile, S.months, k);
+    const pool = Math.max(M.incomeEst, M.income);
+    let moved = 0, after = 0;
+    logs.forEach(function (e) { if (e.d >= R.start && e.d <= R.end) moved += e.a; if (e.d > R.end) after += e.a; });
+    return { k: k, left: pool > 0 ? pool - M.spent : 0, hasInc: pool > 0, moved: moved, bal: total - after };
+  });
+  const W = 340, H = 168, ml = 44, mr = 8, mt = 12, mb = 22, ph = H - mt - mb, bw = (W - ml - mr) / 6;
+  /* chart A: total saved at the end of each month */
+  const maxB = niceCeil(Math.max.apply(null, data.map(function (d) { return d.bal; }).concat([1])));
+  const X = function (i) { return ml + i * bw + bw / 2; }, Y = function (v) { return mt + ph * (1 - Math.max(0, v) / maxB); };
+  let a = '';
+  [0, 0.5, 1].forEach(function (f) { const y = mt + ph * (1 - f); a += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (ml - 5) + '" y="' + (y + 3) + '" text-anchor="end">' + (f === 0 ? '0' : compact(maxB * f)) + '</text>'; });
+  const pts = data.map(function (d, i) { return X(i).toFixed(1) + ',' + Y(d.bal).toFixed(1); });
+  a += '<polygon class="area" points="' + X(0).toFixed(1) + ',' + Y(0).toFixed(1) + ' ' + pts.join(' ') + ' ' + X(5).toFixed(1) + ',' + Y(0).toFixed(1) + '"/><polyline class="runline" points="' + pts.join(' ') + '"/>';
+  a += '<circle class="enddot" cx="' + X(5).toFixed(1) + '" cy="' + Y(data[5].bal).toFixed(1) + '" r="4"/>';
+  data.forEach(function (d, i) { a += '<text class="' + (d.k === viewKey ? 'cur' : '') + '" x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + L.monthLabel(d.k).slice(0, 3) + '</text>'; });
+  /* chart B: left over each month and moved to savings */
+  let hi = 1, lo = 0;
+  data.forEach(function (d) { hi = Math.max(hi, d.left, d.moved); lo = Math.min(lo, d.left, d.moved); });
+  hi = niceCeil(hi); if (lo < 0) lo = -niceCeil(-lo);
+  const Y2 = function (v) { return mt + ph * (1 - (v - lo) / (hi - lo)); };
+  let b = '';
+  [lo, 0, hi].filter(function (v, i, arr) { return arr.indexOf(v) === i; }).forEach(function (v) { const y = Y2(v); b += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (ml - 5) + '" y="' + (y + 3) + '" text-anchor="end">' + (v === 0 ? '0' : compact(v)) + '</text>'; });
+  const bwid = bw * 0.3;
+  data.forEach(function (d, i) {
+    const x0 = ml + i * bw + bw * 0.12, z = Y2(0);
+    const bar1 = function (v, x, cls) { const y = Y2(v); return v === 0 ? '' : '<rect class="' + cls + '" x="' + x.toFixed(1) + '" y="' + Math.min(y, z).toFixed(1) + '" width="' + bwid.toFixed(1) + '" height="' + Math.max(1, Math.abs(z - y)).toFixed(1) + '" rx="2"/>'; };
+    b += bar1(d.left, x0, 'v') + bar1(d.moved, x0 + bwid + 2, 'f');
+    b += '<text class="' + (d.k === viewKey ? 'cur' : '') + '" x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + L.monthLabel(d.k).slice(0, 3) + '</text>';
+  });
+  const cur = data[5];
+  return '<section><h2>Total saved</h2><div class="card pad"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Total saved at the end of each of the last six months">' + a + '</svg>' +
+    '<p class="small muted">Money in your savings pots at the end of each month. Now: <b>' + money(total) + '</b>.</p></div></section>' +
+    '<section><h2>Left over each month</h2><div class="card pad"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Money left over each month and money moved to savings">' + b + '</svg>' +
+    '<p class="small muted"><span style="color:#4FD1FF">&#9632;</span> Income minus spending &nbsp; <span style="color:#9B8CFF">&#9632;</span> Moved to savings pots. ' + (cur.hasInc ? 'This month: ' + money(cur.left) + ' left, ' + money(cur.moved) + ' moved.' : 'Add your salary in Budget to see what is left.') + '</p></div></section>';
+}
 function savingsHTML() {
   const M = L.monthSummary(S.profile, S.months, viewKey);
   const gs = S.profile.goals || [];
@@ -2499,6 +2544,7 @@ function savingsHTML() {
       }).join('') + '</div></details>' : '') + '</div>';
   };
   return '<section><div class="card sums"><div><span class="k">Saved now</span><span class="v">' + money(total) + '</span></div><div><span class="k">Expected</span><span class="v">' + money(exp.total) + '</span></div><div><span class="k">After receiving</span><span class="v">' + money(total + exp.total) + '</span></div></div></section>' +
+    savingsChartsHTML() +
     '<section><div class="sec-head"><h2>Savings pots</h2><button class="link" data-act="new-goal">New pot</button></div>' +
     (gs.length ? '<div class="card list">' + gs.map(potCard).join('') + '</div>' : '<div class="card empty">No savings yet. Tap New pot to start one.</div>') + '</section>' +
     '<section><div class="sec-head"><h2>Money you are expecting</h2><button class="link" data-act="new-owed">Add</button></div>' +
