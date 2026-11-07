@@ -535,7 +535,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:40'; window.__BID__ = '2026-11-06 22:40:39';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:42'; window.__BID__ = '2026-11-06 22:42:57';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -871,11 +871,14 @@ function analyzeHistory(rows, profile) {
   const use = (rows || []).filter(function (r) { return r.status !== 'transfer' && r.status !== 'card' && r.c !== 'Transfer'; });
   if (!use.length) return null;
   let minD = use[0].d, maxD = use[0].d;
-  const per = {}, mer = {};
+  const per = {}, mer = {}, span = {};
   use.forEach(function (r) {
     if (r.d < minD) minD = r.d; if (r.d > maxD) maxD = r.d;
-    const k = periodKeyOf(r.d);
-    const p = per[k] = per[k] || { inc: 0, spend: 0, fixed: 0, byCat: {} };
+    const k = periodKeyOf(r.d), bk = r.bank || '?';
+    const sp = span[bk] = span[bk] || { from: r.d, to: r.d, n: 0 };
+    if (r.d < sp.from) sp.from = r.d; if (r.d > sp.to) sp.to = r.d; sp.n++;
+    const p = per[k] = per[k] || { inc: 0, spend: 0, fixed: 0, byCat: {}, n: 0, bn: {} };
+    p.n++; p.bn[bk] = (p.bn[bk] || 0) + 1;
     if (r.a < 0) { p.inc += -r.a; return; }
     p.spend += r.a; p.byCat[r.c] = (p.byCat[r.c] || 0) + r.a;
     if (typeOf(profile, r.c) === 'fixed') p.fixed += r.a;
@@ -887,14 +890,22 @@ function analyzeHistory(rows, profile) {
   keys.forEach(function (k, i) {
     const R = periodRange(k), p = per[k];
     p.partial = (i === 0 && dn(minD) - dn(R.start) > 4) || (i === keys.length - 1 && dn(R.end) - dn(maxD) > 4);
+    /* a month is only complete if every bank you gave covers all of it */
+    Object.keys(span).forEach(function (b) {
+      const s = span[b];
+      if (dn(s.from) - dn(R.start) > 4 || dn(R.end) - dn(s.to) > 4 || !p.bn[b]) p.partial = true;
+    });
     p.inc = Math.round(p.inc * 100) / 100; p.spend = Math.round(p.spend * 100) / 100; p.fixed = Math.round(p.fixed * 100) / 100;
     Object.keys(p.byCat).forEach(function (c) { p.byCat[c] = Math.round(p.byCat[c] * 100) / 100; });
   });
+  const counts = keys.filter(function (k) { return !per[k].partial; }).map(function (k) { return per[k].n; }).sort(function (a, b) { return a - b; });
+  const med = counts.length ? counts[Math.floor(counts.length / 2)] : 0;
+  keys.forEach(function (k) { if (med >= 10 && per[k].n < med * 0.35) per[k].partial = true; delete per[k].bn; });
   const merchants = Object.keys(mer).map(function (k) { return mer[k]; }).sort(function (a, b) { return b.total - a.total; }).slice(0, 12)
     .map(function (e) { return { name: e.name, total: Math.round(e.total * 100) / 100, n: e.n, cat: e.cat }; });
   const rec = detectRecurring(use, profile.bills || []).found.map(function (f) { return { name: f.name, amount: f.amount, months: f.months, cat: f.cat, first: f.first, firstD: f.firstD, lastD: f.lastD }; })
     .sort(function (a, b) { return b.amount - a.amount; }).slice(0, 20);
-  return { built: maxD, from: minD, to: maxD, n: use.length, keys: keys, months: per, merchants: merchants, rec: rec };
+  return { built: maxD, from: minD, to: maxD, n: use.length, keys: keys, months: per, merchants: merchants, rec: rec, banks: span };
 }
 /* Numbers for the year review, from complete months only */
 function historyStats(h, profile) {
@@ -2405,6 +2416,7 @@ function yearReviewHTML() {
   const st = L.historyStats(h, S.profile);
   if (!st) return '<section><h2>Year review</h2><div class="card pad stack"><span class="small muted">Not enough full months in those files. Choose files that cover at least two months.</span>' + pick + '</div></section>';
   const keys = h.keys, nK = keys.length;
+  const nPart = keys.filter(function (k) { return h.months[k].partial; }).length;
   const W = 340, H = 176, ml = 44, mr = 6, mt = 12, mb = 24, ph = H - mt - mb, bw = (W - ml - mr) / nK;
   const mx = niceCeil(Math.max.apply(null, keys.map(function (k) { return Math.max(h.months[k].inc, h.months[k].spend); }).concat([1])));
   const Y = function (v) { return mt + ph * (1 - v / mx); };
@@ -2443,7 +2455,7 @@ function yearReviewHTML() {
     '<div class="sums" style="margin:0 -16px"><div><span class="k">Income</span><span class="v">' + money(st.inc) + '</span></div><div><span class="k">Spent</span><span class="v">' + money(st.spend) + '</span></div><div><span class="k">Left over</span><span class="v">' + money(st.saved) + '</span></div></div>' +
     '<div class="chips3"><div><b class="mono">' + money(st.avgSp) + '</b><span>Spent a month</span></div><div><b class="mono">' + money(st.avgInc) + '</b><span>Income a month</span></div><div><b class="mono">' + (st.rate == null ? '–' : Math.round(st.rate * 100) + '%') + '</b><span>Saved</span></div></div></div></section>' +
     '<section><h2>Income and spending by month</h2><div class="card pad stack"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Income and spending for each month">' + g + '</svg>' +
-    '<div class="legend3"><span><i class="s-l"></i>Income</span><span><i class="s-f"></i>Spending</span><span><i style="background:var(--warn)"></i>Average spending ' + money(st.avgSp) + '</span></div><div class="small muted">Faded bars are months only partly covered by your files.</div></div></section>' +
+    '<div class="legend3"><span><i class="s-l"></i>Income</span><span><i class="s-f"></i>Spending</span><span><i style="background:var(--warn)"></i>Average spending ' + money(st.avgSp) + '</span></div><div class="small muted">Faded bars are months where a bank file is missing.</div></div></section>' +
     '<section><h2>Where it went</h2><div class="card pad stack">' + catRows + '<div class="small muted">Arrows compare the last 3 months with the 3 before.</div></div></section>' +
     '<section><div class="card pad stack"><b>Use this as your budget</b><span class="small muted">Sets the limit for each everyday category to your typical month from these statements. One-off categories are left out. You can review it before anything changes.</span><div class="btns"><button class="btn" data-act="hist-budget">Review budget</button></div></div></section>' +
     '<section><h2>Highlights</h2><div class="card pad stack">' + hl.map(function (x) { return '<div>' + x + '</div>'; }).join('') + '</div></section>' +
