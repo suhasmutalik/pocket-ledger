@@ -419,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 19:19'; window.__BID__ = '2026-11-06 19:19:55';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 19:24'; window.__BID__ = '2026-11-06 19:24:50';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1767,6 +1767,23 @@ function render() {
   updateBanner();
 }
 
+function carryIn(key) { return Number(((S.profile.carry || {})[key]) || 0); }
+function prevLeft(key) {
+  const pk = L.addMonths(key, -1), pM = L.monthSummary(S.profile, S.months, pk);
+  /* use the usual salary, not money received, so refunds or extra income do not inflate what is left */
+  return Math.round(((pM.incomeEst > 0 ? pM.incomeEst : pM.budget) + carryIn(pk) - pM.spent) * 100) / 100;
+}
+function carryCardHTML() {
+  if (demo || viewKey !== NOW_KEY) return '';
+  const pk = L.addMonths(viewKey, -1);
+  if ((S.profile.carryDone || {})[pk]) return '';
+  if (!(S.profile.income > 0)) return '<section><button class="card pad stack" style="width:100%" data-act="tab" data-tab="budget"><b>Carry forward what is left</b><span class="small muted">Set your monthly salary in Budget first. Then last month\'s leftover shows here.</span></button></section>';
+  const lf = prevLeft(viewKey);
+  if (lf < 1) return '';
+  const pots = (S.profile.goals || []).slice(0, 3).map(function (g) { return '<button class="btn sm ghost" data-act="carry-save" data-id="' + esc(g.id) + '">Move to ' + esc(g.name) + '</button>'; }).join('');
+  return '<section><div class="card pad stack"><b>You had ' + money(lf) + ' left in ' + L.periodLabel(pk) + '</b><span class="small muted">Carry it into this month, or move it to savings.</span>' +
+    '<div class="btns"><button class="btn sm" data-act="carry-fwd">Carry to this month</button>' + pots + '<button class="btn sm ghost" data-act="carry-skip">Skip</button></div></div></section>';
+}
 function homeHTML() {
   const M = L.monthSummary(S.profile, S.months, viewKey);
   const cur = viewKey === NOW_KEY;
@@ -1776,7 +1793,8 @@ function homeHTML() {
   const frac = day / dim;
   const pool = Math.max(M.incomeEst, M.income);
   const bySalary = pool > 0;
-  const base = bySalary ? pool : M.budget;
+  const cIn = carryIn(viewKey);
+  const base = (bySalary ? pool : M.budget) + cIn;
   const left = base - M.spent;
   let status = '', cls = 'good';
   if (base <= 0) { status = ''; }
@@ -1789,7 +1807,7 @@ function homeHTML() {
     hero = '<div class="eyebrow">' + (left >= 0 ? (bySalary ? 'Left from salary' : 'Left to spend') : (bySalary ? 'Over salary by' : 'Over budget by')) + ' &middot; ' + L.periodLabel(viewKey) + '</div>' +
       '<div class="ringbox hero-ring">' + ringSVG(base > 0 ? M.spent / base : 0, left < 0 ? 'bad' : (cls === 'warn' ? 'warn' : 'good'), cur ? frac : null) +
       '<div class="ringc"><div class="ringlab">' + (left >= 0 ? 'left' : 'over') + '</div><div class="ringnum big mono">' + money(Math.abs(left)) + '</div><div class="ringsub">' + Math.round(base > 0 ? M.spent / base * 100 : 0) + '% used</div></div></div>' +
-      '<div class="sub" style="text-align:center">' + money(M.spent) + ' spent of ' + money(base) + (bySalary ? ' salary' + (S.profile.incomeMax > base ? ' (up to ' + money(S.profile.incomeMax) + ')' : '') : ' budgeted') + '</div>' +
+      '<div class="sub" style="text-align:center">' + money(M.spent) + ' spent of ' + money(base) + (bySalary ? (cIn > 0 ? ' (salary + ' + money(cIn) + ' carried forward)' : ' salary') + (S.profile.incomeMax > base ? ' (up to ' + money(S.profile.incomeMax) + ')' : '') : ' budgeted') + '</div>' +
       '<div class="row"><span>' + (cur ? 'Day ' + day + ' of ' + dim + (left > 0 ? ' &middot; about ' + money(left / daysLeft) + ' a day' : '') : 'Month closed') + '</span>' +
       (status ? '<span class="pill ' + cls + '">' + status + '</span>' : '') + '</div>' +
       (bySalary && M.budget > 0 ? '<div class="sub" style="font-size:13px">' + (M.budget > base ? 'Your budget of ' + money(M.budget) + ' is ' + money(M.budget - base) + ' over this salary.' : 'Your budget is ' + money(M.budget) + ', which leaves ' + money(base - M.budget) + ' for savings.') + '</div>' : '');
@@ -1838,7 +1856,7 @@ function homeHTML() {
   const expCard = exp.total > 0 ? '<section><button class="card pad" style="width:100%;display:flex;justify-content:space-between;gap:12px;align-items:baseline" data-act="tab" data-tab="savings"><span>Money you are expecting</span><span class="mono"><b>' + money(exp.total) + '</b></span></button></section>' : '';
   const dueK = demo ? null : L.dueReview(S.months, NOW_KEY, S.profile.reviews || []);
   const revCard = dueK ? '<section><button class="card pad stack" style="width:100%" data-act="review-open" data-auto="1"><b>Your 6-month review is ready</b><span class="small muted">' + L.periodLabel(dueK[0]) + ' to ' + L.periodLabel(dueK[5]) + '. Tap to see how the half year went.</span></button></section>' : '';
-  return '<section class="hero">' + hero + '</section>' + revCard + tripCard + extraHTML(M) + (cur ? comingUpCard() : '') + creditHTML() + expCard +
+  return '<section class="hero">' + hero + '</section>' + carryCardHTML() + revCard + tripCard + extraHTML(M) + (cur ? comingUpCard() : '') + creditHTML() + expCard +
     '<section><h2>Where the budget stands</h2>' + stand + '</section>' +
     '<section><h2>Needs attention</h2>' + attn + '</section>' +
     '<section><h2>By category</h2>' + cats + '</section>' +
@@ -1874,9 +1892,9 @@ function trendSVG() {
 }
 
 const CAT_EMO = [
-  [/rent|huur|mortgage|hypotheek/i, '\u{1F3E0}'], [/housing|home|moving|furnit/i, '\u{1F6CB}\uFE0F'], [/util|energy|electric|water|gas|internet|phone|mobile/i, '\u{1F4A1}'],
+  [/personal care|haircut|barber|beauty|salon|grooming|cosmetic/i, '\u{1F9F4}'], [/rent|huur|mortgage|hypotheek/i, '\u{1F3E0}'], [/housing|home|moving|furnit/i, '\u{1F6CB}\uFE0F'], [/util|energy|electric|water|gas|internet|phone|mobile/i, '\u{1F4A1}'],
   [/insur|verzeker/i, '\u{1F6E1}\uFE0F'], [/subscr|streaming|membership/i, '\u{1F501}'], [/grocer|supermarket|food shop/i, '\u{1F6D2}'],
-  [/dining|restaurant|coffee|cafe|takeaway|eat/i, '\u{1F37D}\uFE0F'], [/transport|train|bus|taxi|uber|fuel|car|parking|ov\b/i, '\u{1F686}'],
+  [/dining|restaurant|coffee|cafe|takeaway|\beat/i, '\u{1F37D}\uFE0F'], [/transport|train|\bbus\b|taxi|uber|fuel|\bcar\b|parking|\bov\b/i, '\u{1F686}'],
   [/shop|cloth|retail/i, '\u{1F6CD}\uFE0F'], [/health|medic|pharm|doctor|gym|fitness/i, '\u{1FA7A}'], [/entertain|movie|game|fun|leisure/i, '\u{1F3AC}'],
   [/travel|trip|flight|hotel|holiday/i, '\u2708\uFE0F'], [/educat|school|course|book/i, '\u{1F4DA}'], [/family|bbma|kids|child/i, '\u{1F46A}'],
   [/bank|fee|tax|interest/i, '\u{1F3E6}'], [/income|salary|wage|bonus/i, '\u{1F4B6}'], [/transfer|saving/i, '\u{1F501}'], [/gift|donat|charity/i, '\u{1F381}'],
@@ -3282,6 +3300,22 @@ function onAction(act, el) {
       if (el.dataset.armed !== '1') { el.dataset.armed = '1'; el.textContent = 'Tap again to delete'; break; }
       mutate(function () { S.profile.goals = S.profile.goals.filter(function (x) { return x.id !== el.dataset.id; }); markProfile(); });
       closeSheet(); render(); break;
+    case 'carry-fwd': case 'carry-save': case 'carry-skip': {
+      const pk = L.addMonths(viewKey, -1), lf = prevLeft(viewKey);
+      if (lf < 1) break;
+      mutate(function () {
+        const p = S.profile; p.carry = p.carry || {}; p.carryDone = p.carryDone || {};
+        if (act === 'carry-fwd') p.carry[viewKey] = Math.round((carryIn(viewKey) + lf) * 100) / 100;
+        if (act === 'carry-save') {
+          const g = (p.goals || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+          if (!g) return;
+          g.saved = Math.round((g.saved + lf) * 100) / 100;
+          (g.log = g.log || []).push({ d: L.today(), a: lf, n: 'Left over from ' + L.periodLabel(pk) }); g.log = g.log.slice(-300);
+        }
+        p.carryDone[pk] = 1; markProfile();
+      });
+      render(); toast(act === 'carry-fwd' ? 'Carried to this month' : act === 'carry-save' ? 'Moved to savings' : 'Skipped'); break;
+    }
     case 'save-deposit': {
       const raw = numval('d-a'), d = val('d-d') || L.today(), note = val('d-n').trim();
       if (isNaN(raw) || raw === 0) { toast('Enter an amount'); break; }
