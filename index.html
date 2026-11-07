@@ -525,6 +525,15 @@ details.card > summary::after { border-color: var(--muted); }
 
 :root.themefade, :root.themefade * { transition: background-color 1.4s ease, color 1.4s ease, border-color 1.4s ease, box-shadow 1.4s ease !important; }
 
+.toast-undo { margin-left: 12px; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.12); color: inherit; font: inherit; font-weight: 700; }
+.quiet .mono:not(.rev), .quiet .hnum:not(.rev), .quiet .big:not(.rev), .quiet .cnt:not(.rev) { filter: blur(7px); transition: filter .2s; cursor: pointer; }
+.quiet .mono.rev, .quiet .hnum.rev, .quiet .big.rev, .quiet .cnt.rev { filter: none; }
+.quiet .chart text, .quiet svg.flow text { filter: blur(5px); }
+.quiet .btn .mono, .quiet input { filter: none; }
+
+.quiet .mono:not(.rev), .quiet .hnum:not(.rev), .quiet .big:not(.rev), .quiet .cnt:not(.rev), .quiet .hsub:not(.rev), .quiet .legend3:not(.rev), .quiet .top-row > span:last-child:not(.rev), .quiet .att-mid .small:not(.rev), .quiet .sums .v:not(.rev), .quiet .kv > span:last-child:not(.rev) { filter: blur(7px); transition: filter .2s; cursor: pointer; }
+.quiet .mono.rev, .quiet .hnum.rev, .quiet .big.rev, .quiet .cnt.rev, .quiet .hsub.rev, .quiet .legend3.rev, .quiet .top-row > span:last-child.rev, .quiet .att-mid .small.rev, .quiet .sums .v.rev, .quiet .kv > span:last-child.rev { filter: none; }
+
 </style>
 </head>
 <body>
@@ -537,7 +546,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 23:16'; window.__BID__ = '2026-11-06 23:16:41';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 23:36'; window.__BID__ = '2026-11-06 23:36:39';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1766,6 +1775,7 @@ function applyTheme() {
 function themeNow() { try { return localStorage.getItem('pl-theme') || 'auto'; } catch (e) { return 'auto'; } }
 function hueOfName(n) { let h = 0; String(n).split('').forEach(function (c) { h = (h * 31 + c.charCodeAt(0)) % 360; }); return h; }
 applyTheme();
+applyQuiet();
 const LS_KEY = 'pocket-ledger-v1';
 const OFFLINE = !!window.__OFFLINE__;
 const BK_KEY = 'pocket-ledger-lastbackup';
@@ -1886,9 +1896,56 @@ function niceCeil(x) {
   for (let i = 0; i < steps.length; i++) if (steps[i] * e >= x) return steps[i] * e;
   return 10 * e;
 }
-function toast(msg) {
+let TOAST_UNDO = null;
+function toast(msg, undo) {
   const el = $('#toast'); el.textContent = msg; el.classList.add('on');
-  clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove('on'); }, 2800);
+  TOAST_UNDO = undo || null;
+  if (undo) { const b = document.createElement('button'); b.className = 'toast-undo'; b.textContent = 'Undo'; b.setAttribute('data-act', 'toast-undo'); el.appendChild(b); el.style.pointerEvents = 'auto'; } else el.style.pointerEvents = 'none';
+  clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove('on'); TOAST_UNDO = null; el.style.pointerEvents = 'none'; }, undo ? 6000 : 2800);
+}
+function undoAdd(id) {
+  return function () { mutate(function () { const f = findTx(id); if (f) { f.arr.splice(f.j, 1); markMonth(f.k); } }); render(); toast('Removed'); refreshRepeat(); };
+}
+function repeatLabel(lm) { return 'Repeat: ' + (lm.m.length > 16 ? lm.m.slice(0, 15) + '\u2026' : lm.m) + ' ' + (lm.oa != null && lm.oc ? moneyIn(lm.oa, lm.oc, true) : money(lm.a, true)); }
+function refreshRepeat() {
+  const lm = lastManual(), host = document.querySelector('[data-act="quick-add"]');
+  if (!host || !lm) return;
+  let b = document.querySelector('[data-act="repeat-last"]');
+  if (!b) { b = document.createElement('button'); b.className = 'btn ghost'; b.setAttribute('data-act', 'repeat-last'); host.parentNode.appendChild(b); }
+  b.textContent = repeatLabel(lm);
+}
+function lastManual() {
+  let best = null;
+  allTx().forEach(function (t) { if (t.src === 'manual' && t.a > 0 && (!best || t.d >= best.d)) best = t; });
+  return best;
+}
+function quietOn() { try { return localStorage.getItem('pl-quiet') === '1'; } catch (e) { return false; } }
+function applyQuiet() { document.documentElement.classList.toggle('quiet', quietOn()); }
+function winsData() {
+  const out = [], today = L.today();
+  const spentDays = {};
+  allTx().forEach(function (t) { if (t.a > 0 && !t.tr && t.c !== 'Transfer' && t.c !== 'Income' && L.typeOf(S.profile, t.c) !== 'fixed') spentDays[t.d] = 1; });
+  let first = '';
+  allTx().forEach(function (t) { if (!first || t.d < first) first = t.d; });
+  const dayMs = 864e5, toD = function (s) { return new Date(s + 'T12:00:00Z'); }, fmt = function (x) { return x.toISOString().slice(0, 10); };
+  let streak = 0, cur = toD(today);
+  if (spentDays[today]) cur = new Date(cur.getTime() - dayMs);
+  while (first && fmt(cur) >= first && !spentDays[fmt(cur)] && streak < 400) { streak++; cur = new Date(cur.getTime() - dayMs); }
+  let best = 0, run = 0;
+  if (first) { let x = toD(first); const end = toD(today); while (x <= end) { if (spentDays[fmt(x)]) run = 0; else { run++; if (run > best) best = run; } x = new Date(x.getTime() + dayMs); } }
+  if (streak >= 1) out.push({ e: '\u{1F334}', t: streak + (streak === 1 ? ' no-spend day' : ' no-spend days in a row'), s: 'No everyday spending logged' + (best > streak ? ' · your best is ' + best : '') });
+  const cats = L.catsOf(S.profile).filter(function (c) { return L.typeOf(S.profile, c) !== 'fixed' && !(S.profile.oneoff || {})[c]; });
+  const sums = [];
+  for (let i = 1; i <= 12; i++) { const k = L.addMonths(NOW_KEY, -i); sums.push({ k: k, has: (S.months[k] || []).length > 0, M: L.monthSummary(S.profile, S.months, k) }); }
+  const wins = [];
+  cats.forEach(function (c) {
+    let n = 0;
+    for (let i = 0; i < sums.length; i++) { const r = sums[i].M.rows.filter(function (x) { return x.cat === c; })[0]; if (!sums[i].has || !r || !(r.limit > 0) || r.spent > r.limit) break; n++; }
+    if (n >= 2) wins.push({ c: c, n: n });
+  });
+  wins.sort(function (x, y) { return y.n - x.n; }).slice(0, 3).forEach(function (w) { out.push({ e: catEmoji(w.c), t: w.c + ' under budget ' + w.n + ' months in a row', s: 'Closed months only' }); });
+  if (sums[0] && sums[0].has) { const M = sums[0].M, pool = Math.max(M.incomeEst, M.income); if (pool > 0 && M.spent < pool) out.push({ e: '\u{1F4B6}', t: 'Last month you spent ' + money(pool - M.spent) + ' less than your salary', s: L.periodLabel(sums[0].k) }); }
+  return out;
 }
 function catOptions(sel, withSpecial) {
   const list = withSpecial ? L.allCatsOf(S.profile) : L.catsOf(S.profile);
@@ -2099,7 +2156,7 @@ function homeHTML() {
       sparkSVG(DSg.days, L.today(), base, cur) +
       '<div class="stack3"><i class="s-f" style="width:' + wf.toFixed(1) + '%"></i><i class="s-v" style="width:' + wv.toFixed(1) + '%"></i><i class="s-l" style="width:' + wl.toFixed(1) + '%"></i></div>' +
       '<div class="legend3"><span><i class="s-f"></i>Bills ' + money(M.fixedSpent) + '</span><span><i class="s-v"></i>Everyday ' + money(M.varSpent) + '</span><span><i class="s-l"></i>' + (left >= 0 ? 'Left ' + money(left) : 'Over ' + money(-left)) + '</span></div>' +
-      '<div class="chips3"><div><b class="mono">' + money(M.spent) + '</b><span>Spent</span></div><div><b class="mono">' + (cur ? (left > 0 ? money(left / daysLeft) : '€0') : '–') + '</b><span>' + (cur ? 'Per day left' : 'Closed') + '</span></div><div><b class="mono">' + day + '/' + dim + '</b><span>Day</span></div></div>' +
+      '<div class="chips3"><div><b class="mono">' + money(M.spent) + '</b><span>Spent</span></div><div><b class="mono">' + (cur ? (left > 0 ? money(left / daysLeft) : '€0') : '–') + '</b><span>' + (cur ? 'Safe per day' : 'Closed') + '</span></div><div><b class="mono">' + day + '/' + dim + '</b><span>Day</span></div></div>' +
       (status ? '<div style="margin-top:12px"><span class="pill ' + cls + '">' + status + '</span></div>' : '') +
       (bySalary && M.budget > 0 ? '<div class="hsub" style="font-size:13px;margin-top:10px">' + (M.budget > base ? 'Your budget of ' + money(M.budget) + ' is ' + money(M.budget - base) + ' over this salary.' : 'Your budget is ' + money(M.budget) + ', which leaves ' + money(base - M.budget) + ' for savings.') + '</div>' : '') + '</div>';
   } else {
@@ -2149,11 +2206,13 @@ function homeHTML() {
     tripCard = '<section><h2>On a trip</h2><button class="card pad stack" style="width:100%" data-act="tab" data-tab="trips"><div style="display:flex;justify-content:space-between;gap:12px"><b>' + esc(at.name) + '</b><span class="mono small muted">Day ' + T.days + '</span></div>' +
       (T.received > 0 ? bar(pct(T.spent, T.received), T.spent > T.received ? 'bad' : 'good') + '<div class="small muted mono" style="display:flex;justify-content:space-between;gap:12px"><span>' + moneyIn(T.spent, at.cur) + ' spent</span><span>' + moneyIn(T.received, at.cur) + (at.kind === 'personal' ? ' budget' : ' per diem so far') + '</span></div>' : '<div class="small muted">' + moneyIn(T.spent, at.cur) + ' spent. Add ' + (at.kind === 'personal' ? 'a budget' : 'your per diem') + ' in Trips to compare.</div>') + '</button></section>';
   }
+  const wn = cur && !demo ? winsData() : [];
+  const winCard = wn.length ? '<section><h2>Wins</h2><div class="card list">' + wn.map(function (w) { return '<div class="att-row good" style="cursor:default"><span class="att-ic">' + w.e + '</span><span class="att-mid"><b>' + esc(w.t) + '</b><span class="small muted">' + esc(w.s) + '</span></span></div>'; }).join('') + '</div></section>' : '';
   const exp = expectedItems();
   const expCard = exp.total > 0 ? '<section><button class="card pad" style="width:100%;display:flex;justify-content:space-between;gap:12px;align-items:baseline" data-act="tab" data-tab="savings"><span>Money you are expecting</span><span class="mono"><b>' + money(exp.total) + '</b></span></button></section>' : '';
   const dueK = demo ? null : L.dueReview(S.months, NOW_KEY, S.profile.reviews || []);
   const revCard = dueK ? '<section><button class="card pad stack" style="width:100%" data-act="review-open" data-auto="1"><b>Your 6-month review is ready</b><span class="small muted">' + L.periodLabel(dueK[0]) + ' to ' + L.periodLabel(dueK[5]) + '. Tap to see how the half year went.</span></button></section>' : '';
-  return '<section class="hero">' + hero + '</section>' + carryCardHTML() + revCard + tripCard + extraHTML(M) + (cur ? comingUpCard() : '') + creditHTML() + expCard +
+  return '<section class="hero">' + hero + '</section>' + carryCardHTML() + revCard + tripCard + winCard + extraHTML(M) + (cur ? comingUpCard() : '') + creditHTML() + expCard +
     '<section><h2>Where the budget stands</h2>' + stand + '</section>' +
     '<section><h2>Needs attention' + (att.length ? ' <span class="cbadge">' + att.length + '</span>' : '') + '</h2>' + attn + '</section>' +
     '<section><h2>By category</h2>' + cats + '</section>' +
@@ -2839,7 +2898,7 @@ function tripsHTML() {
     txs.sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
     return '<div class="card">' +
       '<div class="pad stack"><div class="sec-head"><h3>' + esc(t.name) + '</h3><button class="link" data-act="edit-trip" data-id="' + esc(t.id) + '">Edit</button></div>' +
-      '<div class="muted small mono">' + (personal ? 'Personal' : 'Business') + ' &middot; ' + L.dateLabel(t.start) + (t.end ? ' to ' + L.dateLabel(t.end) : ' to today') + ' &middot; ' + T.days + (T.days === 1 ? ' day' : ' days') + ' &middot; ' + t.cur + '</div>' +
+      (t.cur !== S.profile.currency ? '<div class="pill info" style="align-self:flex-start">Total so far: about ' + money(T.spentHome) + '</div>' : '') + '<div class="muted small mono">' + (personal ? 'Personal' : 'Business') + ' &middot; ' + L.dateLabel(t.start) + (t.end ? ' to ' + L.dateLabel(t.end) : ' to today') + ' &middot; ' + T.days + (T.days === 1 ? ' day' : ' days') + ' &middot; ' + t.cur + '</div>' +
       '<div class="sums" style="margin:0 -14px"><div><span class="k">Spent</span><span class="v">' + moneyIn(T.spent, t.cur) + '</span></div><div><span class="k">' + (personal ? 'Budget' : 'Per diem') + '</span><span class="v">' + (hasPlan ? moneyIn(T.received, t.cur) : '\u2013') + '</span></div><div><span class="k">' + (over ? 'Over by' : 'Left') + '</span><span class="v" style="color:var(--' + (hasPlan ? (over ? 'bad' : 'good') : 'muted') + ')">' + (hasPlan ? moneyIn(Math.abs(T.left), t.cur) : '\u2013') + '</span></div></div>' +
       (hasPlan ? bar(pct(T.spent, T.received), over ? 'bad' : 'good') + '<div class="small muted mono">' + moneyIn(T.perDay, t.cur) + ' a day spent' + (personal ? '' : ' of ' + moneyIn(t.perDiem, t.pdCur || t.cur) + ' per diem') + ' &middot; about ' + money(T.spentHome) + '</div>' : '<div class="note">Set ' + (personal ? 'a budget' : 'your per diem per day') + ' (Edit) to see what is left. About ' + money(T.spentHome) + ' spent so far.</div>') +
       (!personal && t.perDiem > 0 ? (function () {
@@ -3144,10 +3203,10 @@ function addTapsBulk(text) {
 function addHTML() {
   const link = S.profile.appLink || '';
   const tn = themeNow();
-  const appear = '<section><h2>Appearance</h2><div class="card pad"><div class="seg" style="grid-template-columns:repeat(4,1fr)">' + [['auto', 'Auto'], ['sky', 'Sky'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="theme-set" data-v="' + x[0] + '" aria-pressed="' + (tn === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' + (tn === 'sky' ? (function () { const s = skyNow(new Date()); return '<p class="small muted" style="margin:10px 0 0">Right now: ' + s.name + '. Colours follow the sun on your phone clock: sunrise about ' + hm(s.sr) + ', sunset about ' + hm(s.ss) + ' (estimated).</p>'; })() : '<p class="small muted" style="margin:10px 0 0">Sky: colours slowly change through sunrise, midday, sunset and night.</p>') + '</div></section>';
+  const appear = '<section><h2>Appearance</h2><div class="card pad"><div class="seg" style="grid-template-columns:repeat(4,1fr)">' + [['auto', 'Auto'], ['sky', 'Sky'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="theme-set" data-v="' + x[0] + '" aria-pressed="' + (tn === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' + (tn === 'sky' ? (function () { const s = skyNow(new Date()); return '<p class="small muted" style="margin:10px 0 0">Right now: ' + s.name + '. Colours follow the sun on your phone clock: sunrise about ' + hm(s.sr) + ', sunset about ' + hm(s.ss) + ' (estimated).</p>'; })() : '<p class="small muted" style="margin:10px 0 0">Sky: colours slowly change through sunrise, midday, sunset and night.</p>') + '<label class="inline" style="margin-top:12px"><input type="checkbox" data-act="quiet-set"' + (quietOn() ? ' checked' : '') + '> Quiet mode: blur the amounts. Tap one to show it.</label></div></section>';
   const tmpl = (link || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]';
   return appear + '<section><h2>Quick add</h2><div class="card pad stack"><label>Merchant and amount<input id="qa" type="text" placeholder="Blue Bottle 5.50" autocomplete="off"></label>' +
-    '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button></div><div class="small muted" id="qahint">Type, or tap the microphone key on your keyboard and say, for example, Blue Bottle five fifty.</div></div></section>' +
+    '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button>' + (function () { const lm = lastManual(); return lm ? '<button class="btn ghost" data-act="repeat-last">Repeat: ' + esc(lm.m.length > 16 ? lm.m.slice(0, 15) + '…' : lm.m) + ' ' + (lm.oa != null && lm.oc ? moneyIn(lm.oa, lm.oc) : money(lm.a)) + '</button>' : ''; })() + '</div><div class="small muted" id="qahint">Type, or tap the microphone key on your keyboard and say, for example, Blue Bottle five fifty.</div></div></section>' +
     '<section><h2>Add with details</h2><div class="card pad stack">' +
     '<div class="grid2"><label>Amount<input id="n-a" type="number" inputmode="decimal" step="0.01" placeholder="0.00"></label><label>Date<input id="n-d" type="date" value="' + L.today() + '"></label></div>' +
     (S.profile.fx && S.profile.fx.cur ? '<label>Paid in<select id="n-cur">' + [S.profile.currency, S.profile.fx.cur].map(function (c) { return '<option' + (c === defaultEntryCur() ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label><p class="small muted">An entry in the second currency goes to your trip.</p>' : '') +
@@ -3547,19 +3606,27 @@ function onAction(act, el) {
       if (!q) { toast('Enter a merchant and an amount, like Blue Bottle 5.50'); break; }
       if (q.id) { doAddFromTap(q); break; }
       const cat = L.categorize(q.merchant, S.profile.rules);
-      let qf = null;
-      if (mutate(function () { qf = tripFields(q.amount, defaultEntryCur(), L.today()); addTx(Object.assign({ id: L.uid(), d: L.today(), m: q.merchant, c: cat, src: 'manual' }, qf)); })) {
-        $('#qa').value = ''; toast('Added ' + q.merchant + (qf && qf.tr ? ' to your trip' : ' to ' + cat));
+      let qf = null; const nid = L.uid();
+      if (mutate(function () { qf = tripFields(q.amount, defaultEntryCur(), L.today()); addTx(Object.assign({ id: nid, d: L.today(), m: q.merchant, c: cat, src: 'manual' }, qf)); })) {
+        $('#qa').value = ''; if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { /* ignore */ } } toast('Added ' + q.merchant + (qf && qf.tr ? ' to your trip' : ' to ' + cat), undoAdd(nid)); refreshRepeat();
       }
       break;
     }
+    case 'toast-undo': { const f = TOAST_UNDO; TOAST_UNDO = null; $('#toast').classList.remove('on'); if (f) f(); break; }
+    case 'repeat-last': {
+      const lm = lastManual(); if (!lm) break;
+      const nid3 = L.uid(); let rf = null;
+      if (mutate(function () { rf = tripFields(lm.oa != null ? lm.oa : lm.a, lm.oc || S.profile.currency, L.today()); addTx(Object.assign({ id: nid3, d: L.today(), m: lm.m, c: lm.c, src: 'manual' }, rf)); })) { if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) { /* ignore */ } } toast('Added ' + lm.m + ' again', undoAdd(nid3)); refreshRepeat(); }
+      break;
+    }
+    case 'quiet-set': { try { localStorage.setItem('pl-quiet', quietOn() ? '0' : '1'); } catch (e) { /* ignore */ } applyQuiet(); break; }
     case 'add-tx': {
       const a = numval('n-a'), m = val('n-m').trim(), d = val('n-d') || L.today();
       if (isNaN(a) || a === 0 || !m) { toast('Enter an amount and a merchant'); break; }
       let c = val('n-c') || L.categorize(m, S.profile.rules);
-      let nf = null;
-      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: L.uid(), d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
-        $('#n-a').value = ''; $('#n-m').value = ''; toast(nf && nf.tr ? 'Added to your trip' : 'Added to ' + c);
+      let nf = null; const nid2 = L.uid();
+      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: nid2, d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
+        $('#n-a').value = ''; $('#n-m').value = ''; toast(nf && nf.tr ? 'Added to your trip' : 'Added to ' + c, undoAdd(nid2)); refreshRepeat();
       }
       break;
     }
@@ -4292,6 +4359,7 @@ function setTab(t) {
 document.addEventListener('click', function (e) {
   const sheet = $('#sheet');
   if (e.target === sheet) { closeSheet(); return; }
+  if (quietOn()) { const qv = e.target.closest('.mono, .hnum, .big, .cnt, .hsub, .legend3, .top-row > span:last-child, .att-mid .small, .sums .v, .kv > span:last-child'); if (qv && !qv.classList.contains('rev')) { qv.classList.add('rev'); setTimeout(function () { qv.classList.remove('rev'); }, 6000); e.preventDefault(); return; } }
   const el = e.target.closest('[data-act]');
   if (el) onAction(el.dataset.act, el);
 });
