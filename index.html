@@ -535,7 +535,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:45'; window.__BID__ = '2026-11-06 22:45:53';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:50'; window.__BID__ = '2026-11-06 22:50:07';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -885,6 +885,13 @@ function analyzeHistory(rows, profile) {
     const mk = norm(r.m).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).join(' ');
     if (mk.length >= 3) { const e = mer[mk] = mer[mk] || { name: r.m, total: 0, n: 0, cat: r.c }; e.total += r.a; e.n++; }
   });
+  const grp = function (list) {
+    const g = {};
+    list.forEach(function (r) { const k = norm(r.m).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 3).join(' ') + '|' + (r.why || ''); const e = g[k] = g[k] || { name: r.m, total: 0, n: 0, why: r.why || '', last: r.d }; e.total += -r.a; e.n++; if (r.d > e.last) e.last = r.d; });
+    return Object.keys(g).map(function (k) { const e = g[k]; return { name: e.name, total: Math.round(e.total * 100) / 100, n: e.n, why: e.why, last: e.last }; }).sort(function (a, b) { return b.total - a.total; });
+  };
+  const incTop = grp(use.filter(function (r) { return r.a < 0; })).slice(0, 8);
+  const incOut = grp((rows || []).filter(function (r) { return r.a < 0 && (r.status === 'transfer' || r.status === 'card' || r.c === 'Transfer'); }).map(function (r) { return Object.assign({}, r, { why: r.status === 'transfer' ? (r.why || 'moved between your accounts') : r.status === 'card' ? 'card payment' : 'looks like a transfer' }); })).slice(0, 10);
   const keys = Object.keys(per).sort();
   const dn = function (x) { const q = String(x).split('-'); return Math.round(Date.UTC(+q[0], +q[1] - 1, +q[2]) / 864e5); };
   keys.forEach(function (k, i) {
@@ -905,7 +912,7 @@ function analyzeHistory(rows, profile) {
     .map(function (e) { return { name: e.name, total: Math.round(e.total * 100) / 100, n: e.n, cat: e.cat }; });
   const rec = detectRecurring(use, profile.bills || []).found.map(function (f) { return { name: f.name, amount: f.amount, months: f.months, cat: f.cat, first: f.first, firstD: f.firstD, lastD: f.lastD }; })
     .sort(function (a, b) { return b.amount - a.amount; }).slice(0, 20);
-  return { built: maxD, from: minD, to: maxD, n: use.length, keys: keys, months: per, merchants: merchants, rec: rec, banks: span };
+  return { built: maxD, from: minD, to: maxD, n: use.length, keys: keys, months: per, merchants: merchants, rec: rec, banks: span, incTop: incTop, incOut: incOut };
 }
 /* Numbers for the year review, from complete months only */
 function historyStats(h, profile) {
@@ -2457,6 +2464,8 @@ function yearReviewHTML() {
     '<div class="chips3"><div><b class="mono">' + money(st.avgSp) + '</b><span>Spent a month</span></div><div><b class="mono">' + money(st.avgInc) + '</b><span>Income a month</span></div><div><b class="mono">' + (st.rate == null ? '–' : Math.round(st.rate * 100) + '%') + '</b><span>Saved</span></div></div></div></section>' +
     '<section><h2>Income and spending by month</h2><div class="card pad stack"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Income and spending for each month">' + g + '</svg>' +
     '<div class="legend3"><span><i class="s-l"></i>Income</span><span><i class="s-f"></i>Spending</span><span><i style="background:var(--warn)"></i>Average spending ' + money(st.avgSp) + '</span></div><div class="small muted">Faded bars are left out of the averages: a bank file is missing, or you turned the month off below.</div></div></section>' +
+    '<section><h2>Where your income came from</h2><div class="card list">' + ((h.incTop || []).map(function (r) { return '<div class="kv"><span>' + esc(r.name) + '<span class="small muted" style="display:block">' + r.n + ' payments &middot; last ' + L.dateLabel(r.last) + ' ' + r.last.slice(0, 4) + '</span></span><span class="mono">' + money(r.total) + '</span></div>'; }).join('') || '<div class="kv"><span>No incoming payments found</span></div>') +
+    ((h.incOut || []).length ? '<div class="kv"><span class="small muted"><b>Left out of income</b> (money moved between your accounts, or marked as a transfer)</span></div>' + h.incOut.map(function (r) { return '<div class="kv"><span>' + esc(r.name) + '<span class="small muted" style="display:block">' + r.n + ' payments &middot; ' + esc(r.why) + '</span></span><span class="mono">' + money(r.total) + '</span></div>'; }).join('') : '') + '</div></section>' +
     '<section><h2>Which months count?</h2><div class="card pad stack"><span class="small muted">Turn off months that were not typical, like a time without a job. Your averages, budget and highlights use only the months that stay on.</span>' +
     '<div class="btns"><button class="btn sm ghost" data-act="hist-last" data-n="3">Last 3</button><button class="btn sm ghost" data-act="hist-last" data-n="6">Last 6</button><button class="btn sm ghost" data-act="hist-last" data-n="12">Last 12</button><button class="btn sm ghost" data-act="hist-last" data-n="0">All</button></div>' +
     '<div class="chips">' + keys.filter(function (k) { return !h.months[k].partial; }).map(function (k) { return '<button data-act="hist-skip" data-k="' + k + '" aria-pressed="' + !((S.profile.histSkip || {})[k]) + '">' + L.periodLabel(k) + '</button>'; }).join('') + '</div></div></section>' +
