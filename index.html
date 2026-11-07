@@ -419,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 19:18'; window.__BID__ = '2026-11-06 19:18:19';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 19:19'; window.__BID__ = '2026-11-06 19:19:55';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1817,7 +1817,7 @@ function homeHTML() {
   const rows = M.rows.filter(function (r) { return r.spent > 0; }).sort(function (a, b) { return b.spent - a.spent; });
   const cats = '<div class="card list">' + (rows.length ? rows.map(function (r) {
     const over = r.limit > 0 && r.spent > r.limit;
-    return '<div class="cat"><div class="top-row"><span>' + r.cat + '<span class="tag">' + (r.type === 'fixed' ? 'Fixed' : 'Var') + '</span></span>' +
+    return '<div class="cat"><div class="top-row"><span>' + ce(r.cat) + '<span class="tag">' + (r.type === 'fixed' ? 'Fixed' : 'Var') + '</span></span>' +
       '<span class="mono"><b>' + money(r.spent) + '</b>' + (r.limit > 0 ? ' / ' + money(r.limit) : ' &middot; no limit') + '</span></div>' +
       bar(r.limit > 0 ? pct(r.spent, r.limit) : 100, over ? 'bad' : r.type === 'fixed' ? 'fixed' : 'var') + '</div>';
   }).join('') : '<div class="empty">No spending in ' + L.periodLabel(viewKey, true) + ' yet.</div>') + '</div>';
@@ -1873,12 +1873,26 @@ function trendSVG() {
   return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Fixed and variable spending for the last six months">' + g + '</svg>';
 }
 
+const CAT_EMO = [
+  [/rent|huur|mortgage|hypotheek/i, '\u{1F3E0}'], [/housing|home|moving|furnit/i, '\u{1F6CB}\uFE0F'], [/util|energy|electric|water|gas|internet|phone|mobile/i, '\u{1F4A1}'],
+  [/insur|verzeker/i, '\u{1F6E1}\uFE0F'], [/subscr|streaming|membership/i, '\u{1F501}'], [/grocer|supermarket|food shop/i, '\u{1F6D2}'],
+  [/dining|restaurant|coffee|cafe|takeaway|eat/i, '\u{1F37D}\uFE0F'], [/transport|train|bus|taxi|uber|fuel|car|parking|ov\b/i, '\u{1F686}'],
+  [/shop|cloth|retail/i, '\u{1F6CD}\uFE0F'], [/health|medic|pharm|doctor|gym|fitness/i, '\u{1FA7A}'], [/entertain|movie|game|fun|leisure/i, '\u{1F3AC}'],
+  [/travel|trip|flight|hotel|holiday/i, '\u2708\uFE0F'], [/educat|school|course|book/i, '\u{1F4DA}'], [/family|bbma|kids|child/i, '\u{1F46A}'],
+  [/bank|fee|tax|interest/i, '\u{1F3E6}'], [/income|salary|wage|bonus/i, '\u{1F4B6}'], [/transfer|saving/i, '\u{1F501}'], [/gift|donat|charity/i, '\u{1F381}'],
+  [/pet|dog|cat\b/i, '\u{1F43E}'], [/other|misc/i, '\u{1F4E6}']
+];
+function catEmoji(c) {
+  const k = String(c || '');
+  for (let i = 0; i < CAT_EMO.length; i++) if (CAT_EMO[i][0].test(k)) return CAT_EMO[i][1];
+  return '\u{1F3F7}\uFE0F';
+}
+function ce(c) { return catEmoji(c) + ' ' + esc(c); }
 function catIcon(t) {
   const k = t.c || 'Other';
   let h = 0;
   for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) % 360;
-  const ch = String(t.m || k).replace(/[^A-Za-z0-9]/g, '').charAt(0).toUpperCase() || '\u2022';
-  return '<span class="ic" style="--h:' + h + '" aria-hidden="true">' + esc(ch) + '</span>';
+  return '<span class="ic" style="--h:' + h + '" aria-hidden="true">' + (t.c === 'Income' ? '\u{1F4B6}' : catEmoji(k)) + '</span>';
 }
 function txRow(t) {
   const inc = t.c === 'Income';
@@ -1918,7 +1932,7 @@ function catBreakHTML() {
     '<p class="small muted" style="text-align:center;margin:0">Tap a slice or a row to see it. Trips are not included.</p>' +
     '<div class="list">' + rows.map(function (r, i) {
       const on = catSel === r.cat;
-      return '<button class="dn-row' + (on ? ' on' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><i style="background:' + CAT_PAL[i % CAT_PAL.length] + '"></i><span>' + esc(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + Math.round(r.v / total * 100) + '%</span></span></button>';
+      return '<button class="dn-row' + (on ? ' on' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><i style="background:' + CAT_PAL[i % CAT_PAL.length] + '"></i><span>' + ce(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + Math.round(r.v / total * 100) + '%</span></span></button>';
     }).join('') + '</div>' +
     (sel ? '<div class="btns"><button class="btn" data-act="cat-open">See ' + cnt + (cnt === 1 ? ' entry' : ' entries') + ' for ' + esc(sel.cat) + '</button></div>' : '') + '</div></section>';
 }
@@ -2116,7 +2130,7 @@ function initRange() {
 }
 function catRowsHTML(list, total, perYearDays) {
   return list.map(function (r) {
-    return '<div class="cat"><div class="top-row"><span>' + esc(r.cat) + (r.tag ? '<span class="tag">' + r.tag + '</span>' : '') + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + Math.round(total > 0 ? r.v / total * 100 : 0) + '%</span></span></div>' +
+    return '<div class="cat"><div class="top-row"><span>' + ce(r.cat) + (r.tag ? '<span class="tag">' + r.tag + '</span>' : '') + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + Math.round(total > 0 ? r.v / total * 100 : 0) + '%</span></span></div>' +
       bar(total > 0 ? r.v / total * 100 : 0, 'var') +
       (perYearDays ? '<div class="small muted mono" style="margin-top:4px">about ' + money(r.v / perYearDays * 365) + ' a year at this pace</div>' : '') + '</div>';
   }).join('');
@@ -2368,7 +2382,7 @@ function budgetHTML() {
   const usingEst = !(p.income > 0) && M.incomeEst > 0;
   const rowHTML = function (r) {
     const b = p.budgets[r.cat];
-    return '<div class="brow"><div class="nm">' + r.cat + '</div>' +
+    return '<div class="brow"><div class="nm">' + ce(r.cat) + '</div>' +
       '<div class="ctl"><input inputmode="decimal" type="number" min="0" step="5" data-bind="limit" data-cat="' + r.cat + '" value="' + r.limit + '" aria-label="' + r.cat + ' monthly limit"></div>' +
       '<div class="meta"><span class="mono">' + money(r.spent) + ' so far</span>' +
       '<button class="mini' + (r.auto ? ' on' : '') + '" data-act="auto-cat" data-cat="' + r.cat + '" title="Use the automatic amount">' + (r.auto ? 'Auto' : 'Edited &middot; reset') + '</button>' +
@@ -2404,7 +2418,7 @@ function billsHTML() {
   return '<section><div class="sec-head"><h2>Monthly bills</h2><button class="link" data-act="new-bill">Add bill</button></div>' +
     '<div class="note" style="margin-bottom:10px">Amount left looks wrong after changing days? <button class="link" data-act="bills-fix">Re-place all bill deductions</button></div>' +
     '<div class="card list">' + (bills.length ? bills.map(function (b) {
-      return '<div class="brow"><div class="nm">' + esc(b.name) + '</div><div class="ctl"><input type="number" inputmode="decimal" step="0.01" min="0" data-bind="bill" data-id="' + esc(b.id) + '" value="' + b.amount + '" aria-label="' + esc(b.name) + ' amount"></div>' +
+      return '<div class="brow"><div class="nm">' + catEmoji(b.cat) + ' ' + esc(b.name) + '</div><div class="ctl"><input type="number" inputmode="decimal" step="0.01" min="0" data-bind="bill" data-id="' + esc(b.id) + '" value="' + b.amount + '" aria-label="' + esc(b.name) + ' amount"></div>' +
         '<div class="meta"><span>' + (b.cat === 'Transfer' ? 'Card payment, not counted' : esc(b.cat)) + ' &middot; day <input class="dayin" type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></span><button class="mini" data-act="del-bill" data-id="' + esc(b.id) + '">Remove</button></div></div>';
     }).join('') + '<div class="brow"><div class="nm">Total each month</div><div class="mono" style="text-align:right">' + money(total, true) + '</div></div>' : '<div class="empty">No bills yet. Add rent, insurance and subscriptions and they count toward your budget automatically each month.</div>') + '</div></section>' +
     '<section><div class="sec-head"><h2>Your categories</h2><button class="link" data-act="new-cat">Add category</button></div><div class="card attn">' +
@@ -2443,7 +2457,7 @@ function tripsHTML() {
           '<div class="btns" style="align-items:center">' + (t.alPaid ? '<span class="pill good">Allowance received ' + L.dateLabel(t.alPaid) + ' (' + money(t.alAmount) + ')</span><button class="btn sm ghost" data-act="al-undo" data-id="' + esc(t.id) + '">Undo</button>' : (A.qualifies ? '<button class="btn sm" data-act="al-open" data-id="' + esc(t.id) + '">Allowance received</button>' : '')) + '</div>';
       })() +
       '</div>' +
-      (cats.length ? '<div class="list" style="border-top:1px solid var(--line)">' + cats.map(function (c) { return '<div class="cat"><div class="top-row"><span>' + esc(c) + '</span><span class="mono"><b>' + moneyIn(T.byCat[c], t.cur) + '</b></span></div>' + bar(pct(T.byCat[c], T.spent), 'var') + '</div>'; }).join('') + '</div>' : '') +
+      (cats.length ? '<div class="list" style="border-top:1px solid var(--line)">' + cats.map(function (c) { return '<div class="cat"><div class="top-row"><span>' + ce(c) + '</span><span class="mono"><b>' + moneyIn(T.byCat[c], t.cur) + '</b></span></div>' + bar(pct(T.byCat[c], T.spent), 'var') + '</div>'; }).join('') + '</div>' : '') +
       (txs.length ? '<details style="border-top:1px solid var(--line)"><summary class="pad" style="cursor:pointer;font-weight:600;font-size:14px">Entries (' + txs.length + ')</summary><div class="list">' + txs.slice(0, 60).map(txRow).join('') + '</div></details>' : '') +
       (t.end ? '' : '<div class="pad" style="border-top:1px solid var(--line)"><button class="btn ghost sm" data-act="end-trip" data-id="' + esc(t.id) + '">End this trip</button></div>') +
       '</div>';
