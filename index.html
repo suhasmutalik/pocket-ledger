@@ -535,7 +535,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:23'; window.__BID__ = '2026-11-06 22:23:46';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:31'; window.__BID__ = '2026-11-06 22:31:41';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1754,6 +1754,7 @@ function markMonth(k) { dirty.months[k] = true; dirty.profile = true; sched(); }
 function sched() { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 350); setNote('Saving'); }
 function setNote(s) { saveNote = s; const el = $('#savenote'); if (el) el.textContent = (s ? s + ' \u00b7 ' : '') + (window.__BUILD__ ? 'v ' + window.__BUILD__ : ''); }
 async function flush() {
+  if (VIEWING) { dirty.profile = false; dirty.months = {}; return; }
   if (saving) { sched(); return; }
   saving = true;
   const p = dirty.profile, ms = Object.keys(dirty.months);
@@ -1782,6 +1783,7 @@ async function flush() {
 }
 
 function mutate(fn) {
+  if (VIEWING) { toast('View only. Tap Back to mine to make changes.'); return false; }
   if (!loaded) { toast('Still loading your ledger'); return false; }
   if (demo) { S = { profile: defaultProfile(), months: {} }; demo = false; updateBanner(); toast('Example data cleared'); }
   fn();
@@ -1908,8 +1910,9 @@ function renderTabs() {
 }
 function updateBanner() {
   let h = '';
+  if (VIEWING) h += '<div class="note"><b>Viewing ' + esc(VIEWING.name) + '\'s ledger</b> &middot; view only, shared ' + L.dateLabel(VIEWING.saved) + '. <button class="link" data-act="view-exit">Back to mine</button></div>';
   if (demo) h += '<div class="note"><b>Example data.</b> Add an expense or import a statement and these examples are replaced with yours.</div>';
-  if (OFFLINE && loaded && !demo) {
+  if (OFFLINE && loaded && !demo && !VIEWING) {
     const lb = lastBackup();
     const days = lb ? L.daysBetween(lb, L.today()) : 999;
     if (days > 7) h += '<div class="note"><b>Time to back up.</b> ' + (lb ? 'Your last backup was ' + days + ' days ago.' : 'You have not made a backup yet.') + ' <button class="link" data-act="backup-share">Save backup file now</button></div>';
@@ -1984,7 +1987,7 @@ function prevLeft(key) {
   return Math.round(((pM.incomeEst > 0 ? pM.incomeEst : pM.budget) + carryIn(pk) - pM.spent) * 100) / 100;
 }
 function carryCardHTML() {
-  if (demo || viewKey !== NOW_KEY) return '';
+  if (demo || VIEWING || viewKey !== NOW_KEY) return '';
   const pk = L.addMonths(viewKey, -1);
   if ((S.profile.carryDone || {})[pk]) return '';
   const pots = (S.profile.goals || []).slice(0, 3).map(function (g) { return '<button class="btn sm ghost" data-act="carry-save" data-id="' + esc(g.id) + '">Move to ' + esc(g.name) + '</button>'; }).join('');
@@ -2965,7 +2968,8 @@ function famRead(text) {
   try { const o = JSON.parse(b64dec(m[1])); return o && Array.isArray(o.tx) ? o : null; } catch (e) { return null; }
 }
 function famHTML() {
-  return '<section><h2>Family</h2><div class="card pad stack"><b>Send entries for approval</b><span class="small muted">Your partner uses the app on her own phone. She sends her entries as a message. You review them and approve each one before it joins your ledger.</span>' +
+  const viewHTMLPLACE = '<section><h2>Family</h2></section>' + viewHTML();
+  return viewHTMLPLACE + '<section><div class="card pad stack"><b>Send entries for approval</b><span class="small muted">Your partner uses the app on her own phone. She sends her entries as a message. You review them and approve each one before it joins your ledger.</span>' +
     '<label>Your name<input id="fam-name" type="text" value="' + esc(S.profile.famName || '') + '" placeholder="Name to show on your entries"></label>' +
     '<label>Send entries from the last<select id="fam-days"><option value="7">7 days</option><option value="14">14 days</option><option value="31">31 days</option></select></label>' +
     '<div class="btns"><button class="btn" data-act="fam-send">Send my entries</button></div></div></section>' +
@@ -2978,6 +2982,34 @@ function famReviewHTML(P, flags) {
   return '<div class="stack" style="margin-top:8px"><div class="small muted">From <b>' + esc(P.from || 'Family') + '</b> &middot; ' + P.tx.length + ' entries. Untick any you do not want.</div>' + rows + '<div class="btns"><button class="btn" data-act="fam-approve">Approve selected</button><button class="btn ghost" data-act="fam-cancel">Cancel</button></div></div>';
 }
 let FAM = null;
+let VIEWING = null, MINE = null;
+const SHARED_KEY = 'pocket-ledger-shared';
+function readShared() { try { const o = JSON.parse(localStorage.getItem(SHARED_KEY) || 'null'); return o && o.profile && o.months ? o : null; } catch (e) { return null; } }
+function enterView(snap) {
+  if (!VIEWING) MINE = { S: S, demo: demo, tab: tab, filt: filt };
+  S = { profile: snap.profile, months: snap.months };
+  demo = false;
+  VIEWING = { name: snap.name || 'Shared', saved: snap.saved || L.today() };
+  dirty.profile = false; dirty.months = {};
+  applyPeriod(); viewKey = NOW_KEY; filt = { q: '', cat: '', all: false }; sp.view = 'month'; catSel = '';
+  tab = 'home'; history.replaceState(null, '', '#home'); render(); updateBanner(); window.scrollTo(0, 0);
+}
+function exitView() {
+  if (!VIEWING) return;
+  S = MINE.S; demo = MINE.demo; filt = MINE.filt || { q: '', cat: '', all: false };
+  VIEWING = null; MINE = null;
+  dirty.profile = false; dirty.months = {};
+  applyPeriod(); viewKey = NOW_KEY; tab = 'add'; history.replaceState(null, '', '#add'); render(); updateBanner();
+}
+function sharePack() { return JSON.stringify({ app: 'pocket-ledger-view', v: 1, name: S.profile.famName || 'Shared', saved: L.today(), profile: S.profile, months: S.months }); }
+function viewHTML() {
+  const sh = readShared();
+  return '<section><div class="card pad stack"><b>Let your partner see what you see</b><span class="small muted">Send her a view-only copy of your ledger. She opens it in her own app and can look at everything, but not change it. Send a new copy whenever you want her to see the latest numbers.</span>' +
+    '<div class="btns"><button class="btn" data-act="view-share">Send my ledger to view</button></div></div></section>' +
+    '<section><div class="card pad stack"><b>Open a ledger someone shared with you</b>' +
+    (sh ? '<span class="small muted">Last one: ' + esc(sh.name || 'Shared') + ', shared ' + L.dateLabel(sh.saved || L.today()) + '.</span><div class="btns"><button class="btn" data-act="view-open-saved">Open ' + esc(sh.name || 'Shared') + '\'s ledger</button></div>' : '<span class="small muted">Nothing received yet.</span>') +
+    '<label>Choose the file you received<input id="viewfile" type="file"></label><div class="btns"><button class="btn ' + (sh ? 'ghost' : '') + '" data-act="view-open">Open this file</button></div></div></section>';
+}
 function backupText() {
   return JSON.stringify({ app: 'pocket-ledger', v: 1, saved: L.today(), profile: S.profile, months: S.months });
 }
@@ -3748,6 +3780,23 @@ function onAction(act, el) {
       });
       closeSheet(); render(); toast('Budget updated'); break;
     }
+    case 'view-share': shareFile('ledger-to-view-' + L.today() + '.json', sharePack(), 'application/json', function () { toast('Sent'); }); break;
+    case 'view-open': {
+      const f = $('#viewfile') && $('#viewfile').files && $('#viewfile').files[0];
+      if (!f) { toast('Choose the file first'); break; }
+      const fr = new FileReader();
+      fr.onload = function () {
+        let o = null; try { o = JSON.parse(String(fr.result || '')); } catch (e) { /* bad */ }
+        if (!o || o.app !== 'pocket-ledger-view' || !o.profile || !o.months) { toast('That is not a shared ledger file'); return; }
+        try { localStorage.setItem(SHARED_KEY, JSON.stringify(o)); } catch (e) { /* too big to keep, still view it */ }
+        enterView(o);
+      };
+      fr.onerror = function () { toast('Could not read the file'); };
+      fr.readAsText(f);
+      break;
+    }
+    case 'view-open-saved': { const sh = readShared(); if (sh) enterView(sh); else toast('Nothing saved yet'); break; }
+    case 'view-exit': exitView(); break;
     case 'theme-set': { try { localStorage.setItem('pl-theme', el.dataset.v); } catch (e) { /* ignore */ } applyTheme(); render(); break; }
     case 'carry-fwd': case 'carry-save': case 'carry-skip': {
       const pk = L.addMonths(viewKey, -1);
@@ -4244,7 +4293,7 @@ function badTapNote(h) {
 function route() {
   const h = linkHash();
   const tap = L.parseTapHash(h);
-  if (tap) { if (!loaded) { pendingHash = tap; return; } doAddFromTap(tap); return; }
+  if (tap) { if (!loaded) { pendingHash = tap; return; } if (VIEWING) exitView(); doAddFromTap(tap); return; }
   badTapNote(h);
   const name = h.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0 && name !== tab) { tab = name; render(); }
