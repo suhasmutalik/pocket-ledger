@@ -398,6 +398,13 @@ details.card > summary::after { border-color: var(--muted); }
 .dn-row i { width: 10px; height: 10px; border-radius: 50%; display: block; }
 .dn-row.on { background: var(--fill); }
 
+/* money flow */
+.flow { width: 100%; height: auto; display: block; }
+.flow .fl-t { fill: var(--ink, #fff); font-size: 10.5px; paint-order: stroke; stroke: rgba(0,0,0,.55); stroke-width: 2.5px; stroke-linejoin: round; }
+.flow .fl-t.on { font-weight: 700; }
+.flow [data-act] { cursor: pointer; }
+.flow .fl-r { transition: opacity .15s; }
+
 </style>
 </head>
 <body>
@@ -409,7 +416,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:08'; window.__BID__ = '2026-11-06 17:08:19';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:13'; window.__BID__ = '2026-11-06 17:13:38';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1885,6 +1892,78 @@ function catBreakHTML() {
     }).join('') + '</div>' +
     (sel ? '<div class="btns"><button class="btn" data-act="cat-open">See ' + cnt + (cnt === 1 ? ' entry' : ' entries') + ' for ' + esc(sel.cat) + '</button></div>' : '') + '</div></section>';
 }
+/* ---------- money flow (income to groups to categories) ---------- */
+function flowHTML() {
+  if (sp.view === 'range') return '';
+  const M = L.monthSummary(S.profile, S.months, viewKey);
+  const all = Object.keys(M.byCat).map(function (c) { return { cat: c, v: M.byCat[c], type: L.typeOf(S.profile, c) }; }).filter(function (r) { return r.v > 0; }).sort(function (a, b) { return b.v - a.v; });
+  const inc = Math.max(M.incomeEst || 0, M.income || 0);
+  if (!all.length || !(inc > 0)) return '';
+  all.forEach(function (r, i) { r.col = CAT_PAL[i % CAT_PAL.length]; });
+  const spent = M.spent, T = Math.max(inc, spent), left = Math.max(0, inc - spent), short = Math.max(0, spent - inc);
+  function group(type) {
+    const rows = all.filter(function (r) { return (r.type === 'fixed') === (type === 'fixed'); });
+    const big = rows.filter(function (r) { return r.v >= T * 0.015; });
+    const small = rows.filter(function (r) { return r.v < T * 0.015; });
+    if (small.length) big.push({ cat: 'Smaller items', v: small.reduce(function (a, r) { return a + r.v; }, 0), col: '#9aa7b8', type: type, small: true });
+    return big;
+  }
+  const gF = group('fixed'), gV = group('var');
+  const sumF = gF.reduce(function (a, r) { return a + r.v; }, 0), sumV = gV.reduce(function (a, r) { return a + r.v; }, 0);
+  const n2 = gF.length + gV.length;
+  const H = Math.max(240, n2 * 24), gap2 = 6, gap1 = 18;
+  const k = (H - gap2 * (n2 - 1)) / T;
+  const h2 = H;
+  const colX = [6, 100, 200], nw = 10;
+  const midOff = function (hh) { return Math.max(0, (h2 - hh) / 2); };
+  const top = 22;
+  let ribbons = '', nodes = '', labels = '';
+  /* column 0 */
+  const h0 = T * k, y0 = top + midOff(h0);
+  nodes += '<rect class="fl-n" x="' + colX[0] + '" y="' + y0.toFixed(1) + '" width="' + nw + '" height="' + h0.toFixed(1) + '" rx="3" fill="#7be3b5"/>';
+  labels += '<text x="' + colX[0] + '" y="14" class="fl-t">Income ' + money(inc) + '</text>';
+  /* column 1 nodes */
+  const c1 = [];
+  if (sumF > 0) c1.push({ k: 'Bills', v: sumF, col: '#8fb8ff' });
+  if (sumV > 0) c1.push({ k: 'Everyday', v: sumV, col: '#f6c76b' });
+  if (left > 0) c1.push({ k: 'Left', v: left, col: '#7be3b5' });
+  const span1 = c1.reduce(function (a, x) { return a + x.v * k; }, 0) + gap1 * (c1.length - 1);
+  let y1 = top + midOff(span1), src0 = y0;
+  c1.forEach(function (x) {
+    const hh = x.v * k;
+    x.y = y1; x.h = hh; x.srcY = src0;
+    ribbons += '<path class="fl-r" d="' + ribbonD(colX[0] + nw, src0, hh, colX[1], y1, hh) + '" fill="' + x.col + '" opacity=".28"/>';
+    nodes += '<rect class="fl-n" x="' + colX[1] + '" y="' + y1.toFixed(1) + '" width="' + nw + '" height="' + hh.toFixed(1) + '" rx="3" fill="' + x.col + '"/>';
+    labels += '<text x="' + (colX[1] + 15) + '" y="' + (y1 + Math.min(hh / 2, 14) + 4).toFixed(1) + '" class="fl-t">' + x.k + ' ' + money(x.v) + '</text>';
+    src0 += hh; y1 += hh + gap1;
+  });
+  /* column 2 nodes + ribbons */
+  let y2 = top;
+  [['Bills', gF], ['Everyday', gV]].forEach(function (g) {
+    const from = c1.filter(function (x) { return x.k === g[0]; })[0];
+    let sy = from ? from.y : 0;
+    g[1].forEach(function (r) {
+      const hh = Math.max(10, r.v * k), hs = r.v * k;
+      const on = catSel && catSel === r.cat, dim = catSel && !on;
+      const act = r.small ? '' : ' data-act="cat-pick" data-cat="' + esc(r.cat) + '"';
+      ribbons += '<path class="fl-r' + (on ? ' on' : '') + '"' + act + ' d="' + ribbonD(colX[1] + nw, sy, hs, colX[2], y2, hh) + '" fill="' + r.col + '" opacity="' + (on ? '.8' : dim ? '.1' : '.4') + '"/>';
+      nodes += '<rect class="fl-n"' + act + ' x="' + colX[2] + '" y="' + y2.toFixed(1) + '" width="' + nw + '" height="' + hh.toFixed(1) + '" rx="3" fill="' + r.col + '" opacity="' + (dim ? '.3' : '1') + '"/>';
+      labels += '<text x="' + (colX[2] + 15) + '" y="' + (y2 + Math.max(hh / 2, 6) + 4).toFixed(1) + '" class="fl-t' + (on ? ' on' : '') + '"' + act + '>' + esc(r.cat.length > 14 ? r.cat.slice(0, 13) + '…' : r.cat) + ' ' + money(r.v) + '</text>';
+      sy += hs; y2 += hh + gap2;
+    });
+  });
+  const svgH = Math.max(top + h2, y2) + 14;
+  const sel = all.filter(function (r) { return r.cat === catSel; })[0];
+  const line = sel ? esc(sel.cat) + ': ' + money(sel.v) + ', ' + Math.round(sel.v / inc * 100) + '% of your income'
+    : 'Of ' + money(inc) + ' income: bills ' + money(sumF) + ', everyday ' + money(sumV) + (left > 0 ? ', left ' + money(left) : '') + (short > 0 ? '. You spent ' + money(short) + ' more than your income' : '');
+  return '<section><h2>Money flow</h2><div class="card pad stack"><svg class="flow" viewBox="0 0 340 ' + svgH + '" role="img" aria-label="Money flow from income to categories">' + ribbons + nodes + labels + '</svg>' +
+    '<p class="small muted" style="text-align:center;margin:0">' + line + '. Tap a category to follow it.</p></div></section>';
+}
+function ribbonD(x1, ya, ha, x2, yb, hb) {
+  const xm = (x1 + x2) / 2;
+  return 'M' + x1 + ',' + ya.toFixed(1) + ' C' + xm + ',' + ya.toFixed(1) + ' ' + xm + ',' + yb.toFixed(1) + ' ' + x2 + ',' + yb.toFixed(1) +
+    ' L' + x2 + ',' + (yb + hb).toFixed(1) + ' C' + xm + ',' + (yb + hb).toFixed(1) + ' ' + xm + ',' + (ya + ha).toFixed(1) + ' ' + x1 + ',' + (ya + ha).toFixed(1) + ' Z';
+}
 function dailyChartsHTML() {
   const range = sp.view === 'range';
   const today = L.today();
@@ -2096,7 +2175,7 @@ function activityHTML() {
     '<div style="display:flex;align-items:flex-end"><button class="btn ' + (sel.on ? '' : 'ghost') + '" style="width:100%" data-act="sel-toggle-mode">' + (sel.on ? 'Done selecting' : 'Select entries') + '</button></div></div>' +
     '<div class="muted small mono" id="actsum"></div></div></section>' +
     '<section><div class="card list" id="actList"></div></section>' + selBarHTML() + (sel.on ? '<div style="height:110px"></div>' : '');
-  return seg + (range ? rangeControlsHTML() : '') + dailyChartsHTML() + catBreakHTML() + (range ? rangeSummaryHTML() : '') + filters;
+  return seg + (range ? rangeControlsHTML() : '') + dailyChartsHTML() + catBreakHTML() + flowHTML() + (range ? rangeSummaryHTML() : '') + filters;
 }
 function actTx() {
   return sp.view === 'range' ? L.txBetween(S.months, sp.rs, sp.re) : L.txIn(S.months, viewKey);
