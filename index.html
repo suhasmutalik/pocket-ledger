@@ -521,6 +521,8 @@ details.card > summary::after { border-color: var(--muted); }
 .att-ok .att-ic { background: var(--tint); }
 .list.attl > .att-row + .att-row { border-top: 1px solid var(--line); }
 
+.chips button[aria-pressed="true"] { background: var(--tint); color: var(--accent); border-color: rgb(var(--acc-rgb) / .4); }
+
 </style>
 </head>
 <body>
@@ -533,7 +535,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 21:23'; window.__BID__ = '2026-11-06 21:23:16';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 21:31'; window.__BID__ = '2026-11-06 21:31:49';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -895,18 +897,20 @@ function analyzeHistory(rows, profile) {
   return { built: maxD, from: minD, to: maxD, n: use.length, keys: keys, months: per, merchants: merchants, rec: rec };
 }
 /* Numbers for the year review, from complete months only */
-function historyStats(h) {
+function historyStats(h, profile) {
   if (!h) return null;
+  const oo = (profile && profile.oneoff) || {};
   const ks = h.keys.filter(function (k) { return !h.months[k].partial; });
   if (!ks.length) return null;
-  let inc = 0, sp = 0, fx = 0, saved = 0, up = 0;
+  let inc = 0, sp = 0, fx = 0, saved = 0, up = 0, one = 0;
   const cat = {};
   ks.forEach(function (k) {
-    const p = h.months[k]; inc += p.inc; sp += p.spend; fx += p.fixed;
+    const p = h.months[k]; let o = 0, ofx = 0;
+    Object.keys(p.byCat).forEach(function (c) { if (oo[c]) { o += p.byCat[c]; if (typeOf(profile || {}, c) === 'fixed') ofx += p.byCat[c]; } else cat[c] = (cat[c] || 0) + p.byCat[c]; });
+    inc += p.inc; sp += p.spend - o; fx += p.fixed - ofx; one += o;
     if (p.inc > p.spend) up++;
-    Object.keys(p.byCat).forEach(function (c) { cat[c] = (cat[c] || 0) + p.byCat[c]; });
   });
-  saved = inc - sp;
+  saved = inc - sp - one;
   const n = ks.length, half = Math.min(3, Math.floor(n / 2));
   const cats = Object.keys(cat).map(function (c) {
     let rec = 0, old = 0;
@@ -917,7 +921,7 @@ function historyStats(h) {
   }).sort(function (a, b) { return b.total - a.total; });
   const best = ks.slice().sort(function (a, b) { return (h.months[b].inc - h.months[b].spend) - (h.months[a].inc - h.months[a].spend); });
   const dear = ks.slice().sort(function (a, b) { return h.months[b].spend - h.months[a].spend; });
-  return { n: n, inc: inc, spend: sp, saved: saved, rate: inc > 0 ? saved / inc : null, avgInc: inc / n, avgSp: sp / n, fixedShare: sp > 0 ? fx / sp : 0, up: up, cats: cats, bestKey: best[0], dearKey: dear[0] };
+  return { n: n, inc: inc, spend: sp, oneoff: one, saved: saved, rate: inc > 0 ? saved / inc : null, avgInc: inc / n, avgSp: sp / n, fixedShare: sp > 0 ? fx / sp : 0, up: up, cats: cats, bestKey: best[0], dearKey: dear[0] };
 }
 
 /* Same payee under two names (for example family members): rename to the second name */
@@ -1204,14 +1208,15 @@ function dailySeriesRange(months, start, end) {
 }
 function rangeStats(profile, months, start, end) {
   const tx = txBetween(months, start, end);
-  const o = { start: start, end: end, days: daysBetween(start, end) + 1, spent: 0, bills: 0, variable: 0, byCat: {}, trip: 0, tripCount: 0, income: 0, perdiem: 0, count: tx.length };
+  const o = { start: start, end: end, days: daysBetween(start, end) + 1, spent: 0, bills: 0, variable: 0, oneoff: 0, oneoffBy: {}, byCat: {}, trip: 0, tripCount: 0, income: 0, perdiem: 0, count: tx.length };
   tx.forEach(function (t) {
     if (t.src === 'perdiem') { o.perdiem += -t.a; return; }
     if (t.c === 'Income') { o.income += -t.a; return; }
     if (t.c === 'Transfer') return;
     if (t.tr) { o.trip += t.a; o.tripCount++; return; }
     o.spent += t.a; o.byCat[t.c] = (o.byCat[t.c] || 0) + t.a;
-    if (t.src === 'bill') o.bills += t.a; else o.variable += t.a;
+    if ((profile.oneoff || {})[t.c]) { o.oneoff += t.a; o.oneoffBy[t.c] = (o.oneoffBy[t.c] || 0) + t.a; }
+    else if (t.src === 'bill') o.bills += t.a; else o.variable += t.a;
   });
   return o;
 }
@@ -2014,6 +2019,7 @@ function homeHTML() {
     hero = '<div class="hcard ' + tone + '"><div class="eyebrow">' + (left >= 0 ? (bySalary ? 'Left from salary' : 'Left to spend') : (bySalary ? 'Over salary by' : 'Over budget by')) + ' &middot; ' + L.periodLabel(viewKey) + '</div>' +
       '<div class="hnum mono"><span class="cnt" data-v="' + Math.abs(left).toFixed(2) + '">' + money(Math.abs(left)) + '</span></div>' +
       '<div class="hsub">' + money(M.spent) + ' spent of ' + money(base) + (bySalary ? (cIn > 0 ? ' (salary + ' + money(cIn) + ' carried forward)' : ' salary') + (S.profile.incomeMax > base ? ' (up to ' + money(S.profile.incomeMax) + ')' : '') : ' budgeted') + '</div>' +
+      (function () { const oo = Object.keys(S.profile.oneoff || {}).filter(function (c) { return S.profile.oneoff[c]; }); let tot = 0; L.txIn(S.months, viewKey).forEach(function (t) { if (!t.tr && t.a > 0 && oo.indexOf(t.c) >= 0) tot += t.a; }); return tot > 0.5 ? '<div class="hsub" style="margin-top:4px">Includes ' + money(tot) + ' of one-off costs</div>' : ''; })() +
       sparkSVG(DSg.days, L.today(), base, cur) +
       '<div class="stack3"><i class="s-f" style="width:' + wf.toFixed(1) + '%"></i><i class="s-v" style="width:' + wv.toFixed(1) + '%"></i><i class="s-l" style="width:' + wl.toFixed(1) + '%"></i></div>' +
       '<div class="legend3"><span><i class="s-f"></i>Bills ' + money(M.fixedSpent) + '</span><span><i class="s-v"></i>Everyday ' + money(M.varSpent) + '</span><span><i class="s-l"></i>' + (left >= 0 ? 'Left ' + money(left) : 'Over ' + money(-left)) + '</span></div>' +
@@ -2035,6 +2041,7 @@ function homeHTML() {
     '</div>';
   const att = [];
   M.rows.forEach(function (r) {
+    if ((S.profile.oneoff || {})[r.cat]) return;
     if (r.limit > 0 && r.spent > r.limit + 0.5) att.push({ sev: 0, w: r.spent - r.limit, cls: 'bad', cat: r.cat, t: r.cat + ' over budget', s: money(r.spent) + ' of ' + money(r.limit) + ' &middot; over by ' + money(r.spent - r.limit), p: 100 });
     else if (r.limit > 0 && r.spent >= r.limit * 0.85 && r.limit - r.spent >= 0.5 && L.typeOf(S.profile, r.cat) !== 'fixed') att.push({ sev: 1, w: r.spent / r.limit, cls: 'warn', cat: r.cat, t: r.cat + ' nearly at limit', s: money(r.spent) + ' of ' + money(r.limit) + ' &middot; ' + money(r.limit - r.spent) + ' left', p: r.spent / r.limit * 100 });
   });
@@ -2392,7 +2399,7 @@ function yearReviewHTML() {
   if (!h) {
     return '<section><h2>Year review</h2><div class="card pad stack"><b>See the last 12 to 24 months</b><span class="small muted">Choose your ING CSV files and ABN AMRO TXT files together, up to 24 months. The app finds your income, spending, fixed costs and trends. Nothing is added to your ledger, so there is no double counting.</span>' + pick + '</div></section>';
   }
-  const st = L.historyStats(h);
+  const st = L.historyStats(h, S.profile);
   if (!st) return '<section><h2>Year review</h2><div class="card pad stack"><span class="small muted">Not enough full months in those files. Choose files that cover at least two months.</span>' + pick + '</div></section>';
   const keys = h.keys, nK = keys.length;
   const W = 340, H = 176, ml = 44, mr = 6, mt = 12, mb = 24, ph = H - mt - mb, bw = (W - ml - mr) / nK;
@@ -2419,6 +2426,7 @@ function yearReviewHTML() {
   hl.push('You saved money in <b>' + st.up + ' of ' + st.n + '</b> months.');
   hl.push('Most expensive month: <b>' + L.periodLabel(st.dearKey) + '</b>, ' + money(h.months[st.dearKey].spend) + '.');
   hl.push('Best month: <b>' + L.periodLabel(st.bestKey) + '</b>, with ' + money(h.months[st.bestKey].inc - h.months[st.bestKey].spend) + ' left over.');
+  if (st.oneoff > 0) hl.push('One-off costs of <b>' + money(st.oneoff) + '</b> are not in your typical month.');
   hl.push('Fixed costs are <b>' + Math.round(st.fixedShare * 100) + '%</b> of what you spend.');
   const bud = (S.profile.bills || []).reduce(function (a, b) { return a + (b.amount || 0); }, 0);
   if (bud > 0) hl.push('Your bills in Budget add up to ' + money(bud) + ' a month. Your typical month in the statements is ' + money(st.avgSp) + '.');
@@ -2675,6 +2683,7 @@ function creditSettingsHTML() {
     '<p class="small muted">Taps from a card whose name contains this word are counted toward the credit card bill. You pay the bill by the end of the month. Add that payment as a Card payment so it is not counted twice.</p></div></section>';
 }
 function budgetHTML() {
+  if (!('One-off costs' in foldOpen)) foldOpen['One-off costs'] = true;
   const M = L.monthSummary(S.profile, S.months, viewKey);
   const p = S.profile;
   const usingEst = !(p.income > 0) && M.incomeEst > 0;
@@ -2719,6 +2728,8 @@ function billsHTML() {
       return '<div class="brow"><div class="nm">' + catEmoji(b.cat) + ' ' + esc(b.name) + '</div><div class="ctl"><input type="number" inputmode="decimal" step="0.01" min="0" data-bind="bill" data-id="' + esc(b.id) + '" value="' + b.amount + '" aria-label="' + esc(b.name) + ' amount"></div>' +
         '<div class="meta"><span>' + (b.cat === 'Transfer' ? 'Card payment, not counted' : esc(b.cat)) + ' &middot; day <input class="dayin" type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></span><button class="mini" data-act="del-bill" data-id="' + esc(b.id) + '">Remove</button></div></div>';
     }).join('') + '<div class="brow"><div class="nm">Total each month</div><div class="mono" style="text-align:right">' + money(total, true) + '</div></div>' : '<div class="empty">No bills yet. Add rent, insurance and subscriptions and they count toward your budget automatically each month.</div>') + '</div></section>' +
+    '<section><h2>One-off costs</h2><div class="card pad stack"><span class="small muted">Tap the categories that are one-off, like moving or a new couch. They still count in what you spent, but are left out of your typical month and the yearly pace.</span><div class="chips">' +
+    L.catsOf(S.profile).map(function (c) { return '<button data-act="oneoff-toggle" data-cat="' + esc(c) + '" aria-pressed="' + !!(S.profile.oneoff || {})[c] + '">' + ce(c) + '</button>'; }).join('') + '</div></div></section>' +
     '<section><div class="sec-head"><h2>Your categories</h2><button class="link" data-act="new-cat">Add category</button></div><div class="card attn">' +
     ((S.profile.cats || []).length ? S.profile.cats.map(function (c) { return '<span class="pill">' + esc(c.name) + ' &middot; ' + (c.type === 'fixed' ? 'fixed' : 'variable') + '</span>'; }).join('') : '<span class="muted small">Built-in categories only.</span>') + '</div></section>';
 }
@@ -3611,6 +3622,7 @@ function onAction(act, el) {
       break;
     }
     case 'yr-clear': mutate(function () { delete S.profile.hist; markProfile(); }); render(); toast('Review removed'); break;
+    case 'oneoff-toggle': { const c = el.dataset.cat; mutate(function () { const p = S.profile; p.oneoff = p.oneoff || {}; if (p.oneoff[c]) delete p.oneoff[c]; else p.oneoff[c] = true; markProfile(); }); render(); break; }
     case 'theme-set': { try { localStorage.setItem('pl-theme', el.dataset.v); } catch (e) { /* ignore */ } applyTheme(); render(); break; }
     case 'carry-fwd': case 'carry-save': case 'carry-skip': {
       const pk = L.addMonths(viewKey, -1);
