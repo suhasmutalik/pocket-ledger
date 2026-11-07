@@ -535,7 +535,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:31'; window.__BID__ = '2026-11-06 22:31:41';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:40'; window.__BID__ = '2026-11-06 22:40:39';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3253,7 +3253,8 @@ function histBudgetSheet() {
   const rows = st.cats.filter(function (c) { return L.typeOf(S.profile, c.cat) !== 'fixed' && !(S.profile.oneoff || {})[c.cat] && L.catsOf(S.profile).indexOf(c.cat) >= 0; }).map(function (c) {
     return '<div class="kv"><span>' + ce(c.cat) + '</span><span class="mono">' + money(cur[c.cat] || 0) + ' &rarr; <b>' + money(Math.round(c.avg / 5) * 5) + '</b></span></div>';
   }).join('');
-  openSheet('<h3>Budget from your statements</h3><div class="stack"><div class="small muted">Everyday categories, per month. Fixed bills and one-off categories stay as they are.</div><div class="list inner" style="margin:0 -16px">' + (rows || '<div class="kv"><span>Nothing to change</span></div>') + '</div><div class="btns"><button class="btn" data-act="hist-budget-apply">Apply</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+  const h = S.profile.hist, thin = st.n < 3 || (h && h.n / st.n < 15);
+  openSheet('<h3>Budget from your statements</h3><div class="stack"><div class="small muted">Based on ' + st.n + ' full months and ' + (h ? h.n : 0) + ' payments. Everyday categories, per month. Fixed bills and one-off categories stay as they are.</div>' + (thin ? '<div class="note"><b>Not enough data.</b> These files hold too few payments to trust. Add more months or both banks, then analyse again.</div>' : '') + '<div class="list inner" style="margin:0 -16px">' + (rows || '<div class="kv"><span>Nothing to change</span></div>') + '</div><div class="btns">' + (thin ? '' : '<button class="btn" data-act="hist-budget-apply">Apply</button>') + '<button class="btn ghost" data-act="sheet-close">' + (thin ? 'Close' : 'Cancel') + '</button></div></div>');
 }
 function goalSheet(id) {
   const g = (S.profile.goals || []).filter(function (x) { return x.id === id; })[0];
