@@ -505,6 +505,22 @@ details.card > summary::after { border-color: var(--muted); }
 .chart .yi { fill: var(--g1); } .chart .ys { fill: var(--fixed); }
 .tr { font-size: 12px; margin-left: 4px; color: var(--muted); } .tr.up { color: var(--bad); } .tr.dn { color: var(--good); }
 
+.cbadge { display: inline-block; min-width: 20px; padding: 1px 7px; margin-left: 6px; border-radius: 99px; background: var(--bad); color: #fff; font-size: 11px; letter-spacing: 0; text-align: center; vertical-align: 1px; }
+.attl { padding: 4px 0; }
+.att-row { display: grid; grid-template-columns: 44px 1fr 14px; gap: 12px; align-items: center; width: 100%; padding: 12px 16px; text-align: left; transition: transform .15s ease; }
+.att-row:active { transform: scale(.98); }
+.att-ic { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; background: var(--w06); }
+.att-row.bad .att-ic { background: color-mix(in srgb, var(--bad) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 35%, transparent); }
+.att-row.warn .att-ic { background: color-mix(in srgb, var(--fixed) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fixed) 35%, transparent); }
+.att-row.info .att-ic { background: var(--tint); }
+.att-mid { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.att-mid b { font-weight: 600; font-size: 15.5px; letter-spacing: -.01em; }
+.att-mid .bar { height: 6px; margin-top: 4px; }
+.att-chev { color: var(--muted); font-size: 22px; line-height: 1; }
+.att-ok { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.att-ok .att-ic { background: var(--tint); }
+.list.attl > .att-row + .att-row { border-top: 1px solid var(--line); }
+
 </style>
 </head>
 <body>
@@ -517,7 +533,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 21:03'; window.__BID__ = '2026-11-06 21:03:42';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 21:23'; window.__BID__ = '2026-11-06 21:23:16';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2019,12 +2035,17 @@ function homeHTML() {
     '</div>';
   const att = [];
   M.rows.forEach(function (r) {
-    if (r.limit > 0 && r.spent > r.limit) att.push('<button class="pill bad" data-act="filter-cat" data-cat="' + r.cat + '">' + r.cat + ' over by ' + money(r.spent - r.limit) + '</button>');
-    else if (r.limit > 0 && r.spent >= r.limit * 0.85) att.push('<button class="pill warn" data-act="filter-cat" data-cat="' + r.cat + '">' + r.cat + ' at ' + Math.round(r.spent / r.limit * 100) + '%</button>');
+    if (r.limit > 0 && r.spent > r.limit + 0.5) att.push({ sev: 0, w: r.spent - r.limit, cls: 'bad', cat: r.cat, t: r.cat + ' over budget', s: money(r.spent) + ' of ' + money(r.limit) + ' &middot; over by ' + money(r.spent - r.limit), p: 100 });
+    else if (r.limit > 0 && r.spent >= r.limit * 0.85 && r.limit - r.spent >= 0.5 && L.typeOf(S.profile, r.cat) !== 'fixed') att.push({ sev: 1, w: r.spent / r.limit, cls: 'warn', cat: r.cat, t: r.cat + ' nearly at limit', s: money(r.spent) + ' of ' + money(r.limit) + ' &middot; ' + money(r.limit - r.spent) + ' left', p: r.spent / r.limit * 100 });
   });
+  att.sort(function (x, y) { return x.sev - y.sev || y.w - x.w; });
   const other = L.txIn(S.months, viewKey).filter(function (t) { return t.c === 'Other' && !t.tr; }).length;
-  if (other) att.push('<button class="pill" data-act="filter-cat" data-cat="Other">' + other + ' in Other: review</button>');
-  const attn = '<div class="card attn">' + (att.length ? att.join('') : '<span class="muted small">Nothing needs attention this month.</span>') + '</div>';
+  if (other) att.push({ sev: 2, cls: 'info', cat: 'Other', t: other + (other === 1 ? ' payment needs' : ' payments need') + ' a category', s: 'Tap to review them', p: null });
+  const attn = att.length
+    ? '<div class="card list attl">' + att.map(function (x) {
+      return '<button class="att-row ' + x.cls + '" data-act="filter-cat" data-cat="' + esc(x.cat) + '"><span class="att-ic">' + (x.cls === 'info' ? '\u{1F9E9}' : catEmoji(x.cat)) + '</span><span class="att-mid"><b>' + esc(x.t) + '</b><span class="small muted mono">' + x.s + '</span>' + (x.p != null ? bar(Math.min(100, x.p), x.cls) : '') + '</span><span class="att-chev" aria-hidden="true">&#8250;</span></button>';
+    }).join('') + '</div>'
+    : '<div class="card att-ok"><span class="att-ic">\u2705</span><span><b>All on track</b><span class="small muted" style="display:block">Nothing needs your attention this month.</span></span></div>';
   const rows = M.rows.filter(function (r) { return r.spent > 0; }).sort(function (a, b) { return b.spent - a.spent; });
   const cats = '<div class="card list">' + (rows.length ? rows.map(function (r) {
     const over = r.limit > 0 && r.spent > r.limit;
@@ -2051,7 +2072,7 @@ function homeHTML() {
   const revCard = dueK ? '<section><button class="card pad stack" style="width:100%" data-act="review-open" data-auto="1"><b>Your 6-month review is ready</b><span class="small muted">' + L.periodLabel(dueK[0]) + ' to ' + L.periodLabel(dueK[5]) + '. Tap to see how the half year went.</span></button></section>' : '';
   return '<section class="hero">' + hero + '</section>' + carryCardHTML() + revCard + tripCard + extraHTML(M) + (cur ? comingUpCard() : '') + creditHTML() + expCard +
     '<section><h2>Where the budget stands</h2>' + stand + '</section>' +
-    '<section><h2>Needs attention</h2>' + attn + '</section>' +
+    '<section><h2>Needs attention' + (att.length ? ' <span class="cbadge">' + att.length + '</span>' : '') + '</h2>' + attn + '</section>' +
     '<section><h2>By category</h2>' + cats + '</section>' +
     '<section><h2>Last six months</h2><div class="card">' + trendSVG() + '<div class="legend"><span><i style="background:var(--fixed)"></i>Fixed</span><span><i style="background:var(--var)"></i>Variable</span></div></div></section>' +
     '<section><div class="sec-head"><h2>Recent</h2><button class="link" data-act="tab" data-tab="activity">All spending</button></div>' + rec + '</section>' +
