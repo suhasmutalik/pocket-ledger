@@ -405,6 +405,9 @@ details.card > summary::after { border-color: var(--muted); }
 .flow [data-act] { cursor: pointer; }
 .flow .fl-r { transition: opacity .15s; }
 
+.seg { grid-template-columns: repeat(4, 1fr); }
+.seg button { font-size: 13px; padding: 8px 2px; }
+
 </style>
 </head>
 <body>
@@ -416,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:13'; window.__BID__ = '2026-11-06 17:13:38';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 17:17'; window.__BID__ = '2026-11-06 17:17:22';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1724,7 +1727,7 @@ function render() {
     return;
   }
   const mn = $('#mnav');
-  mn.hidden = tab === 'add' || tab === 'trips' || tab === 'calendar' || (tab === 'activity' && sp.view !== 'month');
+  mn.hidden = tab === 'add' || tab === 'trips' || tab === 'calendar' || (tab === 'activity' && (sp.view === 'range' || sp.view === 'insights'));
   $('#mlabel').textContent = L.periodLabel(viewKey);
   $('#mnext').disabled = viewKey >= NOW_KEY;
   renderTabs();
@@ -1732,7 +1735,7 @@ function render() {
   const vv = (tab === 'budget' || tab === 'savings') ? foldSections(v) : v;
   const TITLES = { home: 'Summary', activity: 'Spending', calendar: 'Calendar', budget: 'Budget', trips: 'Trips', savings: 'Savings', add: 'Add' };
   $('#view').innerHTML = '<h1 class="lt">' + TITLES[tab] + '</h1>' + vv;
-  if (tab === 'activity' && sp.view !== 'insights') updateActList();
+  if (tab === 'activity' && sp.view !== 'insights' && sp.view !== 'charts') updateActList();
   if (tab === 'add' && IMP) renderImpBox();
   updateBanner();
 }
@@ -1964,7 +1967,7 @@ function ribbonD(x1, ya, ha, x2, yb, hb) {
   return 'M' + x1 + ',' + ya.toFixed(1) + ' C' + xm + ',' + ya.toFixed(1) + ' ' + xm + ',' + yb.toFixed(1) + ' ' + x2 + ',' + yb.toFixed(1) +
     ' L' + x2 + ',' + (yb + hb).toFixed(1) + ' C' + xm + ',' + (yb + hb).toFixed(1) + ' ' + xm + ',' + (ya + ha).toFixed(1) + ' ' + x1 + ',' + (ya + ha).toFixed(1) + ' Z';
 }
-function dailyChartsHTML() {
+function dailyChartsHTML(part) {
   const range = sp.view === 'range';
   const today = L.today();
   const DS = range ? L.dailySeriesRange(S.months, sp.rs, sp.re) : L.dailySeries(S.months, viewKey);
@@ -2036,16 +2039,17 @@ function dailyChartsHTML() {
   }) };
   const anyTrip = days.some(function (d) { return d.trip > 0; });
   const lbl = range ? dl(sp.rs) + ' to ' + dl(sp.re) : L.periodLabel(viewKey);
-  return '<section><h2>Spending each day</h2><div class="card">' +
+  const p1 = '<section><h2>Spending each day</h2><div class="card">' +
     '<div class="pad" style="padding-bottom:0"><div class="small muted">' + lbl + (peak.v > 0 ? ' &middot; busiest day ' + L.dateLabel(peak.d) + ', ' + money(peak.v) : '') + '</div></div>' +
     '<svg class="chart" data-ch="c1" viewBox="0 0 ' + W + ' ' + H1 + '" role="img" aria-label="Money spent each day">' + g1 + '</svg>' +
     '<div class="readout" id="ro1"><span class="muted">Tap or drag across the bars to see a day</span></div>' +
-    '<div class="legend"><span><i style="background:var(--var)"></i>Everyday</span>' + (anyTrip ? '<span><i style="background:var(--fixed)"></i>Trips</span>' : '') + '<span class="muted">Monthly bills not shown</span></div></div></section>' +
-    '<section><h2>Running total</h2><div class="card">' +
+    '<div class="legend"><span><i style="background:var(--var)"></i>Everyday</span>' + (anyTrip ? '<span><i style="background:var(--fixed)"></i>Trips</span>' : '') + '<span class="muted">Monthly bills not shown</span></div></div></section>';
+  const p2 = '<section><h2>Running total</h2><div class="card">' +
     '<div class="pad" style="padding-bottom:0"><div class="small muted mono">' + money(lastCum) + ' spent so far' + (pool > 0 ? ' of ' + money(pool) + ' salary' : '') + '</div></div>' +
     '<svg class="chart" data-ch="c2" viewBox="0 0 ' + W + ' ' + H2 + '" role="img" aria-label="Running total of everyday spending">' + g2 + '</svg>' +
     '<div class="readout" id="ro2"><span class="muted">Tap or drag along the line to see the total on a day</span></div>' +
     '<div class="legend"><span>Everyday spending including bills, trips excluded</span></div></div></section>';
+  return part === 'daily' ? p1 : part === 'run' ? p2 : p1 + p2;
 }
 function chartTouch(e) {
   const svg = e.target.closest && e.target.closest('svg.chart[data-ch]');
@@ -2067,7 +2071,7 @@ function chartTouch(e) {
 
 /* ---------- spending: month, custom range, insights ---------- */
 function spSegHTML() {
-  return '<section><div class="seg">' + [['month', 'Month'], ['range', 'Custom range'], ['insights', 'Insights']].map(function (v) {
+  return '<section><div class="seg">' + [['month', 'Month'], ['charts', 'Charts'], ['range', 'Range'], ['insights', 'Insights']].map(function (v) {
     return '<button data-act="sp-view" data-v="' + v[0] + '" aria-pressed="' + (sp.view === v[0]) + '">' + v[1] + '</button>';
   }).join('') + '</div></section>';
 }
@@ -2167,6 +2171,7 @@ function reviewSheet(keys, auto) {
 function activityHTML() {
   const seg = spSegHTML();
   if (sp.view === 'insights') return seg + insightsHTML();
+  if (sp.view === 'charts') return seg + dailyChartsHTML('run') + catBreakHTML() + flowHTML();
   const range = sp.view === 'range';
   const filters = '<section><div class="card pad stack">' +
     '<div class="grid2"><label>Search<input id="q" type="search" placeholder="Merchant or category" value="' + esc(filt.q) + '"></label>' +
@@ -2175,7 +2180,7 @@ function activityHTML() {
     '<div style="display:flex;align-items:flex-end"><button class="btn ' + (sel.on ? '' : 'ghost') + '" style="width:100%" data-act="sel-toggle-mode">' + (sel.on ? 'Done selecting' : 'Select entries') + '</button></div></div>' +
     '<div class="muted small mono" id="actsum"></div></div></section>' +
     '<section><div class="card list" id="actList"></div></section>' + selBarHTML() + (sel.on ? '<div style="height:110px"></div>' : '');
-  return seg + (range ? rangeControlsHTML() : '') + dailyChartsHTML() + catBreakHTML() + flowHTML() + (range ? rangeSummaryHTML() : '') + filters;
+  return seg + (range ? rangeControlsHTML() : '') + (range ? dailyChartsHTML() + catBreakHTML() + rangeSummaryHTML() : dailyChartsHTML('daily')) + filters;
 }
 function actTx() {
   return sp.view === 'range' ? L.txBetween(S.months, sp.rs, sp.re) : L.txIn(S.months, viewKey);
@@ -3281,7 +3286,7 @@ function onAction(act, el) {
       closeSheet(); render(); toast('Added'); break;
     }
     case 'cat-pick': catSel = catSel === el.dataset.cat ? '' : el.dataset.cat; render(); break;
-    case 'cat-open': filt = { q: '', cat: catSel }; setTab('activity'); break;
+    case 'cat-open': filt = { q: '', cat: catSel }; sp.view = 'month'; setTab('activity'); break;
     case 'cmp-run': {
       const read = function (id) {
         const f = $(id).files && $(id).files[0];
