@@ -399,14 +399,14 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 15:58'; window.__BID__ = '2026-11-06 15:58:27';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 16:41'; window.__BID__ = '2026-11-06 16:41:12';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
 'use strict';
 
-const FIXED = [['Housing', 30], ['Utilities', 8], ['Insurance', 5], ['Subscriptions', 3]];
-const VARIABLE = [['Groceries', 12], ['Dining', 5], ['Transport', 5], ['Shopping', 4], ['Health', 3], ['Entertainment', 2], ['Travel', 2], ['Education', 1], ['Other', 2]];
+const FIXED = [['Rent', 30], ['Utilities', 8], ['Insurance', 5], ['Subscriptions', 3]];
+const VARIABLE = [['Housing', 3], ['Groceries', 12], ['Dining', 5], ['Transport', 5], ['Shopping', 4], ['Health', 3], ['Entertainment', 2], ['Travel', 2], ['Education', 1], ['Other', 2]];
 const SPEND_CATS = FIXED.concat(VARIABLE).map(function (x) { return x[0]; });
 const ALL_CATS = SPEND_CATS.concat(['Income', 'Transfer']);
 const WEIGHT = {};
@@ -445,7 +445,8 @@ const KEYWORDS = [
   ['Dining', ['burger king', ' kfc ', 'la place', 'matcha', 'poke', 'vending', 'nyx nevagroothandel', 'uber eats', 'ubereats', 'doordash', 'grubhub', 'starbucks', 'mcdonald', 'chipotle', 'restaurant', ' cafe ', 'coffee', 'pizza', 'burger', ' taco ', ' subway ', 'dunkin', 'swiggy', 'zomato', 'bakery', ' bar ', 'kitchen', 'grill', 'sushi', 'ramen', 'bistro', 'in n out', 'chick fil a', ' deli ']],
   ['Groceries', ['trader joe', 'whole foods', 'safeway', 'kroger', 'costco', 'aldi', 'lidl', 'tesco', 'sainsbury', 'albertsons', 'publix', 'instacart', 'grocery', 'supermarket', 'albert heijn', 'ah to go', 'jumbo', 'toka ', 'dirk ', 'spar ', 'sprouts', 'wegmans', 'bigbasket', 'dmart', 'blinkit', 'zepto']],
   ['Utilities', ['odido', 'eneco', 'vattenfall', 'vitens', 'pg e', ' electric', ' water ', 'comcast', 'xfinity', 'verizon', 'at t ', 't mobile', ' internet ', 'utility', 'spectrum', ' jio ', 'airtel', 'con edison']],
-  ['Housing', [' rent ', 'mortgage', ' hoa ', 'landlord', 'property mgmt', 'property management', 'apartments']],
+  ['Rent', [' rent ', 'huur', 'verhuur', 'mortgage', 'hypotheek', ' hoa ', 'landlord', 'property mgmt', 'property management', 'apartments']],
+  ['Housing', ['ikea', 'gamma ', 'praxis', 'hornbach', 'karwei', 'bauhaus', 'home depot', 'lowes', 'furniture', 'mattress', 'jysk']],
   ['Insurance', ['insurance', 'geico', 'state farm', 'allstate', 'progressive', ' lemonade ']],
   ['Health', ['kruidvat', 'etos', 'apotheek', 'pharmacy', ' cvs ', 'walgreens', 'clinic', 'dental', 'dentist', 'doctor', 'hospital', ' gym ', 'fitness', 'rite aid', 'optical', 'medical', 'therapy']],
   ['Entertainment', ['cinema', ' amc ', ' steam ', 'playstation', 'xbox', 'nintendo', 'ticketmaster', 'concert', 'movie', 'bowling', 'eventbrite']],
@@ -1142,7 +1143,7 @@ function trimIdeas(profile, months, nowKey, todayStr, fmt) {
   });
   if ((A['Groceries'] || 0) > 0 && (A['Dining'] || 0) > (A['Groceries'] || 0) * 0.8) out.push({ id: 'ratio', title: 'Dining almost matches groceries', why: 'You spend ' + f(A['Dining']) + ' eating out against ' + f(A['Groceries']) + ' on groceries. Shifting a few meals home is usually the cheapest swap.', save: 0, tag: 'Check' });
   if ((A['Other'] || 0) >= 50) out.push({ id: 'other', title: 'Find what is hiding in Other', why: 'About ' + f(A['Other']) + ' a month is uncategorised. Sort it in Spending to see if any of it is a leak.', save: 0, tag: 'Check' });
-  const ess = { Housing: 1, Utilities: 1, Insurance: 1, Transfer: 1, Subscriptions: 1, 'Bank fees': 1 };
+  const ess = { Rent: 1, Utilities: 1, Insurance: 1, Transfer: 1, Subscriptions: 1, 'Bank fees': 1 };
   const big = bills.filter(function (b) { return !ess[b.cat]; }).sort(function (a, b) { return b.amount - a.amount; })[0];
   if (big && big.amount >= 100) out.push({ id: 'big', title: 'Your largest flexible fixed cost: ' + big.name, why: f(big.amount) + ' a month' + (profile.income > 0 ? ', ' + Math.round(big.amount / profile.income * 100) + '% of your lowest pay' : '') + '. This one is your call. It is shown so you can see its weight in the plan, not as a suggestion to cut.', save: 0, tag: 'Your call' });
   if (bills.some(function (b) { return b.cat === 'Utilities'; })) out.push({ id: 'util', title: 'Compare energy and phone plans once a year', why: 'Providers raise rates after the first contract year. A comparison site takes ten minutes and often saves a little.', save: 0, tag: 'Check' });
@@ -1427,7 +1428,7 @@ function makeDemo() {
   for (let i = 3; i >= 0; i--) {
     const k = L.addMonths(NOW_KEY, -i);
     push(k, 1, 'Acme Payroll', -2600, 'Income'); push(k, 15, 'Acme Payroll', -2600, 'Income');
-    push(k, 1, 'Maple Street Apartments Rent', 1650, 'Housing');
+    push(k, 1, 'Maple Street Apartments Rent', 1650, 'Rent');
     push(k, 8, 'PG&E Electric', rf(72, 98), 'Utilities'); push(k, 12, 'Comcast Internet', 65, 'Utilities'); push(k, 14, 'Verizon Wireless', 55, 'Utilities');
     push(k, 3, 'iCloud Storage', 2.99, 'Subscriptions'); push(k, 5, 'Netflix', 15.49, 'Subscriptions'); push(k, 9, 'Spotify', 11.99, 'Subscriptions'); push(k, 20, 'ChatGPT Plus', 20, 'Subscriptions');
     push(k, 18, 'Geico Auto Insurance', 112, 'Insurance');
@@ -3406,6 +3407,19 @@ function ensureEvents() {
   });
   if (changed) { p.posted = p.posted.slice(-600); Object.keys(keys).forEach(markMonth); markProfile(); }
 }
+function splitRent() {
+  const p = S.profile;
+  if (demo || p.rentSplit) return;
+  mutate(function () {
+    (p.bills || []).forEach(function (b) { if (b.cat === 'Housing') b.cat = 'Rent'; });
+    Object.keys(S.months).forEach(function (k) {
+      let hit = false;
+      S.months[k].forEach(function (t) { if (t.src === 'bill' && t.c === 'Housing') { t.c = 'Rent'; hit = true; } });
+      if (hit) markMonth(k);
+    });
+    p.rentSplit = true; markProfile();
+  });
+}
 function repairBills() {
   const p = S.profile;
   if (demo || p.billsFixed || !(p.bills || []).length) return;
@@ -3546,7 +3560,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); ensureBills(); ensureEvents();
+  repairBills(); splitRent(); ensureBills(); ensureEvents();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
