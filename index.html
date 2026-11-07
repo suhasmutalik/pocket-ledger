@@ -523,6 +523,8 @@ details.card > summary::after { border-color: var(--muted); }
 
 .chips button[aria-pressed="true"] { background: var(--tint); color: var(--accent); border-color: rgb(var(--acc-rgb) / .4); }
 
+:root.themefade, :root.themefade * { transition: background-color 1.4s ease, color 1.4s ease, border-color 1.4s ease, box-shadow 1.4s ease !important; }
+
 </style>
 </head>
 <body>
@@ -535,7 +537,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 22:50'; window.__BID__ = '2026-11-06 22:50:07';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 23:16'; window.__BID__ = '2026-11-06 23:16:41';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1697,15 +1699,67 @@ S = makeDemo();
 /* ---------- storage ---------- */
 const Store = { mode: 'none', db: null, base: '' };
 const sleep = function (ms) { return new Promise(function (res) { setTimeout(res, ms); }); };
+/* sky theme: colours follow the sun (sunrise, noon, sunset, night) */
+function skyTimes(d) {
+  const y0 = new Date(d.getFullYear(), 0, 1), doy = Math.floor((d - y0) / 864e5) + 1;
+  const decl = 23.44 * Math.sin(2 * Math.PI * (doy - 81) / 365) * Math.PI / 180, lat = 50 * Math.PI / 180;
+  const c = Math.max(-1, Math.min(1, -Math.tan(lat) * Math.tan(decl))), half = Math.acos(c) * 12 / Math.PI;
+  const jan = new Date(d.getFullYear(), 0, 1).getTimezoneOffset(), jul = new Date(d.getFullYear(), 6, 1).getTimezoneOffset();
+  const dst = d.getTimezoneOffset() < Math.max(jan, jul) ? 1 : 0;
+  const noon = 12 + dst;
+  return { sr: noon - half, noon: noon, ss: noon + half };
+}
+const SKY = [
+  { o: -1.5, dark: 1, bg: [5, 6, 8], a1: [94, 240, 192, .12], a2: [155, 140, 255, .08], tc: '#050608', n: 'Night' },
+  { o: -0.4, dark: 1, bg: [12, 9, 16], a1: [255, 130, 120, .50], a2: [150, 110, 255, .24], tc: '#0C0910', n: 'Dawn' },
+  { o: 0.6, dark: 0, bg: [247, 241, 232], a1: [255, 190, 120, .50], a2: [255, 140, 140, .14], tc: '#F7F1E8', n: 'Sunrise' },
+  { o: 2.5, dark: 0, bg: [243, 246, 240], a1: [200, 235, 130, .48], a2: [11, 132, 201, .12], tc: '#F3F6F0', n: 'Morning' },
+  { m: 0, dark: 0, bg: [242, 245, 241], a1: [159, 232, 112, .45], a2: [11, 132, 201, .10], tc: '#F2F5F1', n: 'Midday' },
+  { o: -2.5, e: 1, dark: 0, bg: [247, 243, 234], a1: [255, 205, 110, .50], a2: [255, 150, 120, .12], tc: '#F7F3EA', n: 'Afternoon' },
+  { o: -0.5, e: 1, dark: 1, bg: [14, 8, 14], a1: [255, 105, 85, .55], a2: [190, 90, 255, .32], tc: '#0E080E', n: 'Sunset' },
+  { o: 1.2, e: 1, dark: 1, bg: [8, 7, 14], a1: [140, 110, 255, .32], a2: [255, 120, 160, .14], tc: '#08070E', n: 'Dusk' },
+  { o: 2.5, e: 1, dark: 1, bg: [5, 6, 8], a1: [94, 240, 192, .12], a2: [155, 140, 255, .08], tc: '#050608', n: 'Night' }
+];
+function skyNow(d) {
+  const t = skyTimes(d), h = d.getHours() + d.getMinutes() / 60;
+  const pts = SKY.map(function (k) { return { h: k.m != null ? t.noon : (k.e ? t.ss : t.sr) + k.o, k: k }; });
+  pts.unshift({ h: pts[pts.length - 1].h - 24, k: SKY[SKY.length - 1].k });
+  pts.push({ h: pts[1].h + 24, k: SKY[0] });
+  let i = 0;
+  while (i < pts.length - 2 && h >= pts[i + 1].h) i++;
+  const A = pts[i], B = pts[i + 1], f = Math.max(0, Math.min(1, (h - A.h) / Math.max(.01, B.h - A.h)));
+  const mix = function (x, y) { return x.map(function (v, j) { return v + (y[j] - v) * f; }); };
+  const bg = mix(A.k.bg, B.k.bg), a1 = mix(A.k.a1, B.k.a1), a2 = mix(A.k.a2, B.k.a2);
+  const near = f < .5 ? A.k : B.k;
+  return { dark: near.dark, bg: bg, a1: a1, a2: a2, name: near.n, tc: near.tc, sr: t.sr, ss: t.ss };
+}
+const hm = function (x) { const m = Math.round(x * 60); return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+let SKYTIMER = null, LASTDARK = null;
 function applyTheme() {
   let t = 'auto';
   try { t = localStorage.getItem('pl-theme') || 'auto'; } catch (e) { /* ignore */ }
   const r = document.documentElement;
-  if (t === 'light' || t === 'dark') r.setAttribute('data-theme', t); else r.removeAttribute('data-theme');
+  clearTimeout(SKYTIMER);
+  const rgba = function (v) { return 'rgba(' + Math.round(v[0]) + ',' + Math.round(v[1]) + ',' + Math.round(v[2]) + ',' + (v[3] != null ? v[3].toFixed(3) : 1) + ')'; };
+  let tc = null;
+  if (t === 'sky') {
+    const s = skyNow(new Date());
+    if (LASTDARK !== null && LASTDARK !== s.dark) { r.classList.add('themefade'); setTimeout(function () { r.classList.remove('themefade'); }, 1600); }
+    LASTDARK = s.dark;
+    r.setAttribute('data-theme', s.dark ? 'dark' : 'light');
+    r.style.setProperty('--bg', rgba(s.bg)); r.style.setProperty('--aura1', rgba(s.a1)); r.style.setProperty('--aura2', rgba(s.a2));
+    tc = s.tc;
+    SKYTIMER = setTimeout(applyTheme, 60000);
+  } else {
+    LASTDARK = null;
+    ['--bg', '--aura1', '--aura2'].forEach(function (p) { r.style.removeProperty(p); });
+    if (t === 'light' || t === 'dark') r.setAttribute('data-theme', t); else r.removeAttribute('data-theme');
+  }
   const ms = document.querySelectorAll('meta[name="theme-color"]');
   for (let i = 0; i < ms.length; i++) {
     const dark = ms[i].getAttribute('media') === '(prefers-color-scheme: dark)';
-    if (t === 'auto') { ms[i].removeAttribute('data-forced'); ms[i].setAttribute('content', dark ? '#050608' : '#F2F5F1'); }
+    if (tc) ms[i].setAttribute('content', tc);
+    else if (t === 'auto') ms[i].setAttribute('content', dark ? '#050608' : '#F2F5F1');
     else ms[i].setAttribute('content', t === 'dark' ? '#050608' : '#F2F5F1');
   }
 }
@@ -3090,7 +3144,7 @@ function addTapsBulk(text) {
 function addHTML() {
   const link = S.profile.appLink || '';
   const tn = themeNow();
-  const appear = '<section><h2>Appearance</h2><div class="card pad"><div class="seg" style="grid-template-columns:repeat(3,1fr)">' + [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="theme-set" data-v="' + x[0] + '" aria-pressed="' + (tn === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div></div></section>';
+  const appear = '<section><h2>Appearance</h2><div class="card pad"><div class="seg" style="grid-template-columns:repeat(4,1fr)">' + [['auto', 'Auto'], ['sky', 'Sky'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="theme-set" data-v="' + x[0] + '" aria-pressed="' + (tn === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' + (tn === 'sky' ? (function () { const s = skyNow(new Date()); return '<p class="small muted" style="margin:10px 0 0">Right now: ' + s.name + '. Colours follow the sun on your phone clock: sunrise about ' + hm(s.sr) + ', sunset about ' + hm(s.ss) + ' (estimated).</p>'; })() : '<p class="small muted" style="margin:10px 0 0">Sky: colours slowly change through sunrise, midday, sunset and night.</p>') + '</div></section>';
   const tmpl = (link || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]';
   return appear + '<section><h2>Quick add</h2><div class="card pad stack"><label>Merchant and amount<input id="qa" type="text" placeholder="Blue Bottle 5.50" autocomplete="off"></label>' +
     '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button></div><div class="small muted" id="qahint">Type, or tap the microphone key on your keyboard and say, for example, Blue Bottle five fifty.</div></div></section>' +
