@@ -419,7 +419,7 @@ details.card > summary::after { border-color: var(--muted); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 19:24'; window.__BID__ = '2026-11-06 19:24:50';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '06 Nov 19:29'; window.__BID__ = '2026-11-06 19:29:17';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1777,12 +1777,10 @@ function carryCardHTML() {
   if (demo || viewKey !== NOW_KEY) return '';
   const pk = L.addMonths(viewKey, -1);
   if ((S.profile.carryDone || {})[pk]) return '';
-  if (!(S.profile.income > 0)) return '<section><button class="card pad stack" style="width:100%" data-act="tab" data-tab="budget"><b>Carry forward what is left</b><span class="small muted">Set your monthly salary in Budget first. Then last month\'s leftover shows here.</span></button></section>';
-  const lf = prevLeft(viewKey);
-  if (lf < 1) return '';
   const pots = (S.profile.goals || []).slice(0, 3).map(function (g) { return '<button class="btn sm ghost" data-act="carry-save" data-id="' + esc(g.id) + '">Move to ' + esc(g.name) + '</button>'; }).join('');
-  return '<section><div class="card pad stack"><b>You had ' + money(lf) + ' left in ' + L.periodLabel(pk) + '</b><span class="small muted">Carry it into this month, or move it to savings.</span>' +
-    '<div class="btns"><button class="btn sm" data-act="carry-fwd">Carry to this month</button>' + pots + '<button class="btn sm ghost" data-act="carry-skip">Skip</button></div></div></section>';
+  return '<section><div class="card pad stack"><b>Anything left from ' + L.periodLabel(pk) + '?</b><span class="small muted">Type what was left over, then carry it into this month or move it to savings.</span>' +
+    '<label>Amount left<input id="cf-a" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></label>' +
+    '<div class="btns"><button class="btn sm" data-act="carry-fwd">Carry to this month</button>' + pots + '<button class="btn sm ghost" data-act="carry-skip">Nothing left</button></div></div></section>';
 }
 function homeHTML() {
   const M = L.monthSummary(S.profile, S.months, viewKey);
@@ -3301,8 +3299,9 @@ function onAction(act, el) {
       mutate(function () { S.profile.goals = S.profile.goals.filter(function (x) { return x.id !== el.dataset.id; }); markProfile(); });
       closeSheet(); render(); break;
     case 'carry-fwd': case 'carry-save': case 'carry-skip': {
-      const pk = L.addMonths(viewKey, -1), lf = prevLeft(viewKey);
-      if (lf < 1) break;
+      const pk = L.addMonths(viewKey, -1);
+      const lf = act === 'carry-skip' ? 0 : Math.round(numval('cf-a') * 100) / 100;
+      if (act !== 'carry-skip' && (isNaN(lf) || lf <= 0)) { toast('Type the amount that was left'); break; }
       mutate(function () {
         const p = S.profile; p.carry = p.carry || {}; p.carryDone = p.carryDone || {};
         if (act === 'carry-fwd') p.carry[viewKey] = Math.round((carryIn(viewKey) + lf) * 100) / 100;
