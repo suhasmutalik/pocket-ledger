@@ -586,7 +586,7 @@ html.sky body { background: var(--bg); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '07 Nov 21:52'; window.__BID__ = '2026-11-07 21:52:18';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '07 Nov 21:54'; window.__BID__ = '2026-11-07 21:54:03';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1788,7 +1788,7 @@ function skyRender(s) {
   const moon = el.querySelector('.sk-moon'), hn = h >= ss ? h : h + 24, q = (hn - ss) / Math.max(.1, sr + 24 - ss);
   if (q > -.02 && q < 1.02) {
     const qc = Math.max(0, Math.min(1, q));
-    moon.style.cssText = 'opacity:' + Math.min(1, Math.max(0, Math.min(q + .02, 1.02 - q) * 10)).toFixed(2) + ';left:' + (10 + 80 * qc).toFixed(1) + '%;top:' + (210 - 115 * Math.sin(Math.PI * qc)).toFixed(0) + 'px';
+    moon.style.cssText = 'opacity:' + Math.min(1, Math.max(0, Math.min(q + .02, 1.02 - q) * 10)).toFixed(2) + ';left:calc(100% - 44px);top:150px';
     const f = moonPhase(new Date()), key = f.toFixed(2);
     if (moon.getAttribute('data-f') !== key) { moon.innerHTML = moonSVG(f); moon.setAttribute('data-f', key); }
   } else moon.style.opacity = 0;
