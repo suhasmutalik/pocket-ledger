@@ -586,7 +586,7 @@ html.sky body { background: var(--bg); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '07 Nov 21:55'; window.__BID__ = '2026-11-07 21:55:39';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 15:54'; window.__BID__ = '2026-11-08 15:54:34';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1684,6 +1684,7 @@ let tab = 'home';
 let viewKey = L.monthKey(L.today());
 let filt = { q: '', cat: '', kind: '' };
 let actSort = 'new';
+let addKind = 'expense';
 const sel = { on: false, ids: {}, shown: [] };
 const sp = { view: 'month', rs: '', re: '', scope: '12' };
 let reviewKeys = null;
@@ -3307,13 +3308,14 @@ function addHTML() {
   const tmpl = (link || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]';
   return appear + '<section><h2>Quick add</h2><div class="card pad stack"><label>Merchant and amount<input id="qa" type="text" placeholder="Blue Bottle 5.50" autocomplete="off"></label>' +
     '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button>' + (function () { const lm = lastManual(); return lm ? '<button class="btn ghost" data-act="repeat-last">Repeat: ' + esc(lm.m.length > 16 ? lm.m.slice(0, 15) + '…' : lm.m) + ' ' + (lm.oa != null && lm.oc ? moneyIn(lm.oa, lm.oc) : money(lm.a)) + '</button>' : ''; })() + '</div><div class="small muted" id="qahint">Type, or tap the microphone key on your keyboard and say, for example, Blue Bottle five fifty.</div></div></section>' +
-    '<section><h2>Add with details</h2><div class="card pad stack">' +
+    '<section><h2>Add with details</h2><div class="card pad stack" id="addcard">' +
+    '<div class="seg" style="grid-template-columns:repeat(2,1fr)">' + [['expense', 'Expense (money out)'], ['income', 'Income (money in)']].map(function (x) { return '<button data-act="add-kind" data-v="' + x[0] + '" aria-pressed="' + (addKind === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' +
     '<div class="grid2"><label>Amount<input id="n-a" type="number" inputmode="decimal" step="0.01" placeholder="0.00"></label><label>Date<input id="n-d" type="date" value="' + L.today() + '"></label></div>' +
     (S.profile.fx && S.profile.fx.cur ? '<label>Paid in<select id="n-cur">' + [S.profile.currency, S.profile.fx.cur].map(function (c) { return '<option' + (c === defaultEntryCur() ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label><p class="small muted">An entry in the second currency goes to your trip.</p>' : '') +
-    '<label>Merchant<input id="n-m" type="text" placeholder="Where did it go?"></label>' +
-    '<label>Category<select id="n-c"><option value="">Pick automatically</option>' + catOptions('', true) + '</select></label>' +
-    '<label>If it is income, it is<select id="n-it">' + incomeTypeOptions('base') + '</select></label>' +
-    '<div class="btns"><button class="btn" data-act="add-tx">Add</button></div></div></section>' +
+    '<label><span id="n-ml">' + (addKind === 'income' ? 'Who paid you?' : 'Merchant') + '</span><input id="n-m" type="text" placeholder="' + (addKind === 'income' ? 'For example Salary' : 'Where did it go?') + '"></label>' +
+    '<label class="kx"' + (addKind === 'income' ? ' style="display:none"' : '') + '>Category<select id="n-c"><option value="">Pick automatically</option>' + catOptions('', true).replace('<option>Income</option>', '') + '</select></label>' +
+    '<label class="ki"' + (addKind === 'income' ? '' : ' style="display:none"') + '>Type of income<select id="n-it">' + incomeTypeOptions('base') + '</select></label>' +
+    '<div class="btns"><button class="btn" data-act="add-tx" id="n-go">' + (addKind === 'income' ? 'Add income' : 'Add expense') + '</button></div></div></section>' +
     scanSectionHTML() +
     '<section><h2>Import a statement</h2><div class="card pad stack">' +
     '<p class="small muted">Upload a CSV from your bank or card. Expenses are sorted into categories on the spot, and rows you already have are skipped. For a PDF statement, send it to Claude in chat and ask for a CSV.</p>' +
@@ -3720,10 +3722,21 @@ function onAction(act, el) {
       break;
     }
     case 'quiet-set': { try { localStorage.setItem('pl-quiet', quietOn() ? '0' : '1'); } catch (e) { /* ignore */ } applyQuiet(); break; }
+    case 'add-kind': {
+      addKind = el.dataset.v === 'income' ? 'income' : 'expense';
+      const inc = addKind === 'income';
+      document.querySelectorAll('[data-act="add-kind"]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === addKind)); });
+      const kx = document.querySelector('#addcard .kx'), ki = document.querySelector('#addcard .ki');
+      if (kx) kx.style.display = inc ? 'none' : ''; if (ki) ki.style.display = inc ? '' : 'none';
+      const ml = $('#n-ml'); if (ml) ml.textContent = inc ? 'Who paid you?' : 'Merchant';
+      const nm = $('#n-m'); if (nm) nm.placeholder = inc ? 'For example Salary' : 'Where did it go?';
+      const go = $('#n-go'); if (go) go.textContent = inc ? 'Add income' : 'Add expense';
+      break;
+    }
     case 'add-tx': {
       const a = numval('n-a'), m = val('n-m').trim(), d = val('n-d') || L.today();
       if (isNaN(a) || a === 0 || !m) { toast('Enter an amount and a merchant'); break; }
-      let c = val('n-c') || L.categorize(m, S.profile.rules);
+      let c = addKind === 'income' ? 'Income' : (val('n-c') || L.categorize(m, S.profile.rules));
       let nf = null; const nid2 = L.uid();
       if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: nid2, d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
         $('#n-a').value = ''; $('#n-m').value = ''; toast(nf && nf.tr ? 'Added to your trip' : 'Added to ' + c, undoAdd(nid2)); refreshRepeat();
