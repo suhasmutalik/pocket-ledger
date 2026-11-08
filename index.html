@@ -586,7 +586,7 @@ html.sky body { background: var(--bg); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 15:54'; window.__BID__ = '2026-11-08 15:54:34';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 15:57'; window.__BID__ = '2026-11-08 15:57:58';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3737,6 +3737,7 @@ function onAction(act, el) {
       const a = numval('n-a'), m = val('n-m').trim(), d = val('n-d') || L.today();
       if (isNaN(a) || a === 0 || !m) { toast('Enter an amount and a merchant'); break; }
       let c = addKind === 'income' ? 'Income' : (val('n-c') || L.categorize(m, S.profile.rules));
+      if (addKind !== 'income' && c === 'Income') c = 'Other';
       let nf = null; const nid2 = L.uid();
       if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: nid2, d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
         $('#n-a').value = ''; $('#n-m').value = ''; toast(nf && nf.tr ? 'Added to your trip' : 'Added to ' + c, undoAdd(nid2)); refreshRepeat();
