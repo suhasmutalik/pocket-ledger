@@ -569,10 +569,6 @@ html.sky body { background: var(--bg); }
 @keyframes skCloud { to { transform: translateX(calc(100vw + 400px)); } }
 .sk-sun { width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: radial-gradient(circle at 40% 40%, #FFFBE0, #FFD36B 55%, #FFB347); box-shadow: 0 0 40px 18px rgba(255,200,100,.6), 0 0 100px 50px rgba(255,170,80,.28); opacity: 0; transition: left 60s linear, top 60s linear; }
 .sk-moon { margin: -22px 0 0 -22px; opacity: 0; filter: drop-shadow(0 0 12px rgba(190,205,255,.55)); transition: left 60s linear, top 60s linear; }
-.sk-iss { opacity: 0; transition: left 18s linear, top 18s linear, opacity 1s; }
-.sk-iss .dot { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: #7CF3C8; box-shadow: 0 0 8px 2px rgba(124,243,200,.9); animation: skPulse 2s ease-in-out infinite; }
-.sk-iss .lbl { position: absolute; left: 8px; top: -7px; font-size: 9.5px; letter-spacing: .04em; color: rgba(210,255,240,.9); white-space: nowrap; text-shadow: 0 0 4px #000; }
-@keyframes skPulse { 50% { transform: scale(1.7); opacity: .55; } }
 #sky.paused *, #sky.paused *::after { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: reduce) { #sky *, #sky *::after { animation: none !important; } .sk-stars i { opacity: .8; } }
 .wrap, .tabs { position: relative; z-index: 1; }
@@ -590,7 +586,7 @@ html.sky body { background: var(--bg); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '07 Nov 21:47'; window.__BID__ = '2026-11-07 21:47:03';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '07 Nov 21:52'; window.__BID__ = '2026-11-07 21:52:18';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1755,7 +1751,7 @@ const Store = { mode: 'none', db: null, base: '' };
 const sleep = function (ms) { return new Promise(function (res) { setTimeout(res, ms); }); };
 /* sky theme: colours follow the sun (sunrise, noon, sunset, night) */
 /* sky layer: gradient, sun or moon, stars and small night animations (CSS only, light) */
-let SKYEL = null, ISS = { t: null, last: 0 };
+let SKYEL = null;
 function moonPhase(d) { const jd = d.getTime() / 864e5 + 2440587.5; return (((jd - 2451550.1) / 29.530588853) % 1 + 1) % 1; }
 function moonSVG(f) {
   const r = 20, c = Math.cos(2 * Math.PI * f), rx = Math.abs(c) * r;
@@ -1773,7 +1769,7 @@ function skyBuild() {
     '<div class="sk-sh"><i class="a"></i><i class="b"></i><i class="c"></i></div>' +
     '<div class="sk-quasar"><span class="core"></span><span class="beams"><u></u><u></u></span></div>' +
     '<div class="sk-clouds"><i style="top:70px;--w:130px;--d:150s"></i><i style="top:130px;--w:170px;--d:210s;animation-delay:-80s"></i><i style="top:40px;--w:100px;--d:180s;animation-delay:-40s"></i></div>' +
-    '<div class="sk-sun"></div><div class="sk-moon"></div><div class="sk-iss"><span class="dot"></span><span class="lbl"></span></div>';
+    '<div class="sk-sun"></div><div class="sk-moon"></div>';
   document.body.insertBefore(el, document.body.firstChild);
   return el;
 }
@@ -1796,28 +1792,9 @@ function skyRender(s) {
     const f = moonPhase(new Date()), key = f.toFixed(2);
     if (moon.getAttribute('data-f') !== key) { moon.innerHTML = moonSVG(f); moon.setAttribute('data-f', key); }
   } else moon.style.opacity = 0;
-  skyIss(nt);
 }
-function skyOff() { clearTimeout(ISS.t); ISS.t = null; if (SKYEL && SKYEL.parentNode) SKYEL.parentNode.removeChild(SKYEL); SKYEL = null; }
-function skyIss(nt) {
-  const el = SKYEL; if (!el) return;
-  const box = el.querySelector('.sk-iss');
-  if (nt < .5 || !navigator.onLine || document.hidden) { box.style.opacity = 0; clearTimeout(ISS.t); ISS.t = null; return; }
-  if (ISS.t) return;
-  const tick = function () {
-    ISS.t = null;
-    if (!SKYEL || nt < .3 || document.hidden || !navigator.onLine) { if (SKYEL) SKYEL.querySelector('.sk-iss').style.opacity = 0; return; }
-    fetch('https://api.wheretheiss.at/v1/satellites/25544').then(function (r) { return r.json(); }).then(function (j) {
-      if (!SKYEL || !(j && isFinite(j.latitude))) return;
-      const b = SKYEL.querySelector('.sk-iss'), lat = j.latitude, lon = j.longitude;
-      b.style.left = ((lon + 180) / 360 * 100).toFixed(1) + '%'; b.style.top = (130 - lat * 1.15).toFixed(0) + 'px'; b.style.opacity = 1;
-      b.querySelector('.lbl').textContent = 'ISS · ' + Math.abs(lat).toFixed(0) + '°' + (lat >= 0 ? 'N' : 'S') + ' ' + Math.abs(lon).toFixed(0) + '°' + (lon >= 0 ? 'E' : 'W');
-    }).catch(function () { /* offline or blocked: just hide */ if (SKYEL) SKYEL.querySelector('.sk-iss').style.opacity = 0; });
-    ISS.t = setTimeout(tick, 20000);
-  };
-  tick();
-}
-document.addEventListener('visibilitychange', function () { if (SKYEL) { SKYEL.classList.toggle('paused', document.hidden); if (!document.hidden) { clearTimeout(ISS.t); ISS.t = null; applyTheme(); } } });
+function skyOff() { if (SKYEL && SKYEL.parentNode) SKYEL.parentNode.removeChild(SKYEL); SKYEL = null; }
+document.addEventListener('visibilitychange', function () { if (SKYEL) { SKYEL.classList.toggle('paused', document.hidden); if (!document.hidden) applyTheme(); } });
 function skyTimes(d) {
   const y0 = new Date(d.getFullYear(), 0, 1), doy = Math.floor((d - y0) / 864e5) + 1;
   const decl = 23.44 * Math.sin(2 * Math.PI * (doy - 81) / 365) * Math.PI / 180, lat = 50 * Math.PI / 180;
