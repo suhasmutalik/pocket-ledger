@@ -643,6 +643,18 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 #toast.has-undo .toast-undo { background: rgba(255,255,255,.22); color: #fff; border: 1px solid rgba(255,255,255,.3); }
 #toast:not(.has-undo) { background: rgba(28,28,32,.6); color: #fff; -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border: 1px solid rgba(255,255,255,.16); }
 
+/* calendar heat map */
+.hcal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.hcal.hcw span { text-align: center; font-size: 12px; color: var(--muted); }
+.hcb { aspect-ratio: 1; }
+.hcd { aspect-ratio: 1; border: 0; border-radius: 12px; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: #1b1b1f; font: inherit; cursor: pointer; min-width: 0; }
+.hcd b { font-size: 13px; font-weight: 700; line-height: 1; }
+.hcd span { font-size: 11px; font-weight: 600; line-height: 1; opacity: .85; }
+.hcd.z { color: var(--muted); }
+.hcd.tdy { outline: 2px solid var(--ink); outline-offset: 1px; }
+.hcd.sel { box-shadow: 0 0 0 2px var(--accent, #34c98a) inset; }
+#heatdet { display: flex; flex-direction: column; gap: 2px; }
+
 </style>
 </head>
 <body>
@@ -655,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:09'; window.__BID__ = '2026-11-08 23:09:50';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:18'; window.__BID__ = '2026-11-08 23:18:34';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1648,8 +1660,18 @@ function autoLimit(profile, months, cat, key) {
   return round5(((WEIGHT[cat] || 2) / sw) * share * income);
 }
 
+/* Personal trips paid from your salary: this money leaves your pocket, so it counts as spending in the salary month. */
+function personalTripSpend(profile, months, key) {
+  const trips = {};
+  ((profile && profile.trips) || []).forEach(function (x) { if (x.kind === 'personal' && (x.fund || 'salary') === 'salary') trips[x.id] = true; });
+  let sum = 0;
+  txIn(months, key).forEach(function (t) { if (t.tr && trips[t.tr] && t.c !== 'Income' && t.c !== 'Transfer') sum += Number(t.a) || 0; });
+  return Math.round(sum * 100) / 100;
+}
 function monthSummary(profile, months, key) {
   const t = totals(months, key);
+  const tripPersonal = personalTripSpend(profile, months, key);
+  t.spent += tripPersonal;
   const rows = catsOf(profile).map(function (cat) {
     const b = (profile.budgets || {})[cat];
     const auto = !(b && b.auto === false);
@@ -1684,7 +1706,7 @@ function monthSummary(profile, months, key) {
   ex.canSave = ex.baseLeft + ex.toSavings;
   return {
     extra: ex,
-    spent: t.spent, income: t.income, perdiem: t.perdiem, byCat: t.byCat, count: t.count, rows: rows,
+    tripPersonal: tripPersonal, spent: t.spent, income: t.income, perdiem: t.perdiem, byCat: t.byCat, count: t.count, rows: rows,
     fixedSpent: s.fixedSpent, fixedLimit: s.fixedLimit, varSpent: s.varSpent, varLimit: s.varLimit,
     budget: budget, incomeEst: incomeEst, savTarget: savTarget, savedMonth: savedMonth
   };
@@ -1815,7 +1837,7 @@ const api = {
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
   parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, analyzeHistory: analyzeHistory, historyStats: historyStats, normalizeSpoken: normalizeSpoken, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, cardCheck: cardCheck, priceRises: priceRises, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
-  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
+  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary, personalTripSpend: personalTripSpend
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else root.LedgerLogic = api;
@@ -2445,6 +2467,7 @@ function homeHTML() {
   const stand = '<div class="card list">' +
     '<div class="stand"><div class="top-row"><span>Fixed bills</span><span class="mono"><b>' + money(M.fixedSpent) + '</b> / ' + money(M.fixedLimit) + '</span></div>' + bar(pct(M.fixedSpent, M.fixedLimit), M.fixedSpent > M.fixedLimit && M.fixedLimit > 0 ? 'bad' : 'fixed') + '</div>' +
     '<div class="stand"><div class="top-row"><span>Variable spending</span><span class="mono"><b>' + money(M.varSpent) + '</b> / ' + money(M.varLimit) + '</span></div>' + bar(pct(M.varSpent, M.varLimit), M.varSpent > M.varLimit && M.varLimit > 0 ? 'bad' : 'var', cur && M.varLimit > 0 ? frac * 100 : null) + '</div>' +
+    (M.tripPersonal > 0 ? '<div class="stand"><div class="top-row"><span>Personal trip, paid from salary</span><span class="mono"><b>' + money(M.tripPersonal) + '</b></span></div></div>' : '') +
     (M.incomeEst > 0 ? '<div class="stand"><div class="top-row"><span>Salary received</span><span class="mono"><b>' + money(M.income) + '</b> / ' + money(M.incomeEst) + (S.profile.incomeMax > M.incomeEst ? '\u2013' + money(S.profile.incomeMax) : '') + '</span></div>' + bar(pct(M.income, S.profile.incomeMax > M.incomeEst ? S.profile.incomeMax : M.incomeEst), 'good', S.profile.incomeMax > M.incomeEst ? pct(M.incomeEst, S.profile.incomeMax) : null) + '</div>' : '') +
     '<div class="stand"><div class="top-row"><span>Saved this month</span><span class="mono"><b>' + money(M.savedMonth) + '</b> / ' + money(M.savTarget) + '</span></div>' + bar(savBar, 'good') + '</div>' +
     '</div>';
@@ -2715,38 +2738,39 @@ function heatColor(t) {
   const x = Math.max(0, Math.min(1, t)) * (HEAT_STOPS.length - 1), i = Math.min(HEAT_STOPS.length - 2, Math.floor(x)), f = x - i, A = HEAT_STOPS[i], B = HEAT_STOPS[i + 1];
   return 'rgb(' + [0, 1, 2].map(function (j) { return Math.round(A[j] + (B[j] - A[j]) * f); }).join(',') + ')';
 }
+let heatCat = '';
 function heatHTML() {
   if (sp.view === 'range') return '';
   const r = L.periodRange(viewKey), n = L.daysBetween(r.start, r.end) + 1;
-  const days = []; for (let i = 0; i < n; i++) days.push(L.addDays(r.start, i));
-  const cell = {}, tot = {};
+  const byDay = {}, tot = {};
   L.txIn(S.months, viewKey).forEach(function (t) {
     if ((t.tr && !heatTrips) || t.src === 'perdiem' || t.src === 'bill' || t.c === 'Income' || t.c === 'Transfer' || !(t.a > 0)) return;
     if (L.typeOf(S.profile, t.c) === 'fixed') return;
-    const k = t.c + '|' + t.d; cell[k] = (cell[k] || 0) + t.a; tot[t.c] = (tot[t.c] || 0) + t.a;
+    tot[t.c] = (tot[t.c] || 0) + t.a;
+    if (heatCat && t.c !== heatCat) return;
+    const e = byDay[t.d] = byDay[t.d] || { sum: 0, list: [] };
+    e.sum += t.a; e.list.push(t);
   });
-  const cats = Object.keys(tot).sort(function (x, y) { return tot[y] - tot[x]; }).slice(0, 8);
+  const cats = Object.keys(tot).sort(function (x, y) { return tot[y] - tot[x]; });
   if (!cats.length) return '';
-  HEAT = { cell: cell };
-  let mx = 1; cats.forEach(function (c) { days.forEach(function (d) { mx = Math.max(mx, cell[c + '|' + d] || 0); }); });
-  const W = 340, lw = 92, cw = (W - lw - 4) / n, rh = 22, top = 22, H = top + cats.length * rh + 6;
-  let g = '';
-  days.forEach(function (d, i) {
-    const wd = new Date(d + 'T12:00:00').getDay(), x = lw + i * cw;
-    if (wd === 0 || wd === 6) g += '<rect x="' + x.toFixed(1) + '" y="' + (top - 2) + '" width="' + cw.toFixed(1) + '" height="' + (cats.length * rh + 2) + '" class="hm-we"/>';
-    if (i % 5 === 0 || i === n - 1) g += '<text x="' + (x + cw / 2).toFixed(1) + '" y="12" text-anchor="middle" class="hm-d">' + Number(d.slice(8)) + '</text>';
-  });
-  cats.forEach(function (c, ri) {
-    const y = top + ri * rh;
-    g += '<text x="0" y="' + (y + 15) + '" class="hm-l">' + esc((catEmoji(c) + ' ' + (c.length > 11 ? c.slice(0, 10) + '…' : c))) + '</text>';
-    days.forEach(function (d, i) {
-      const v = cell[c + '|' + d] || 0, x = lw + i * cw;
-      g += '<rect class="hm-c" data-act="heat-cell" data-cat="' + esc(c) + '" data-d="' + d + '" x="' + (x + .6).toFixed(1) + '" y="' + (y + 1) + '" width="' + Math.max(2, cw - 1.2).toFixed(1) + '" height="' + (rh - 3) + '" rx="2.5" style="fill:' + (v ? heatColor(Math.sqrt(v / mx)) : 'rgba(128,140,152,.14)') + '"/>';
-    });
-  });
-  return '<section><h2>Spending by day</h2><div class="card pad stack"><div class="chips">' + [[true, 'Everything'], [false, 'Without trips']].map(function (o) { return '<button data-act="heat-mode" data-v="' + o[0] + '" aria-pressed="' + (heatTrips === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div><svg class="heat" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Heat map of everyday spending by category and day">' + g + '</svg>' +
+  if (heatCat && cats.indexOf(heatCat) < 0) heatCat = '';
+  HEAT = { day: byDay };
+  let mx = 1, total = 0; Object.keys(byDay).forEach(function (d) { mx = Math.max(mx, byDay[d].sum); total += byDay[d].sum; });
+  const first = (new Date(r.start + 'T12:00:00').getDay() + 6) % 7, today = L.today();
+  let cells = '';
+  for (let b = 0; b < first; b++) cells += '<i class="hcb"></i>';
+  for (let i = 0; i < n; i++) {
+    const d = L.addDays(r.start, i), e = byDay[d], v = e ? e.sum : 0;
+    const ht = v ? Math.min(1, v / mx) : 0;
+    cells += '<button class="hcd' + (d === today ? ' tdy' : '') + (v ? '' : ' z') + '" data-act="heat-day" data-d="' + d + '" style="background:' + (v ? heatColor(ht) : 'rgba(128,140,152,.14)') + (ht > 0.7 ? ';color:#fff' : '') + '"><b>' + Number(d.slice(8)) + '</b><span>' + (v ? Math.round(v) : '') + '</span></button>';
+  }
+  const chips = [['', 'All']].concat(cats.slice(0, 6).map(function (c) { return [c, catEmoji(c) + ' ' + c]; }));
+  return '<section><h2>Spending by day</h2><div class="card pad stack">' +
+    '<div class="chips">' + [[true, 'Everything'], [false, 'Without trips']].map(function (o) { return '<button data-act="heat-mode" data-v="' + o[0] + '" aria-pressed="' + (heatTrips === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div>' +
+    '<div class="chips">' + chips.map(function (c) { return '<button data-act="heat-cat" data-c="' + esc(c[0]) + '" aria-pressed="' + (heatCat === c[0]) + '">' + esc(c[1]) + '</button>'; }).join('') + '</div>' +
+    '<div class="hcal hcw"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div><div class="hcal">' + cells + '</div>' +
     '<div class="hm-leg"><span class="small muted">Nothing</span><i style="background:rgba(128,140,152,.14)"></i><span class="small muted">Less</span>' + [0.1, 0.35, 0.6, 0.85, 1].map(function (t) { return '<i style="background:' + heatColor(t) + '"></i>'; }).join('') + '<span class="small muted">More</span></div>' +
-    '<p class="small muted" id="heatcap" style="margin:0">Yellow is a little, red is a lot. Tap a square for details. Shaded columns are weekends. Fixed bills are left out' + (heatTrips ? '. Trip spending is included, whether it is a work trip or a personal one.' : ' and so is trip spending.') + '</p></div></section>';
+    '<div id="heatdet" class="small muted">' + (heatCat ? esc(heatCat) + ': ' : '') + money(total) + ' in this period. Tap a day to see what you bought. Fixed bills are left out' + (heatTrips ? '. Trips are included.' : ' and so are trips.') + '</div></div></section>';
 }
 /* ---------- money flow (income to groups to categories) ---------- */
 const FLOWSMALL = { f: [], v: [] };
@@ -3410,6 +3434,14 @@ function tripsHTML() {
       (t.cur !== S.profile.currency ? '<div class="pill info" style="align-self:flex-start">Total so far: about ' + money(T.spentHome) + '</div>' : '') + '<div class="muted small mono">' + (personal ? 'Personal' : 'Business') + ' &middot; ' + L.dateLabel(t.start) + (t.end ? ' to ' + L.dateLabel(t.end) : ' to today') + ' &middot; ' + T.days + (T.days === 1 ? ' day' : ' days') + ' &middot; ' + t.cur + '</div>' +
       '<div class="sums" style="margin:0 -14px"><div><span class="k">Spent</span><span class="v">' + moneyIn(T.spent, t.cur) + '</span></div><div><span class="k">' + (personal ? 'Budget' : 'Per diem') + '</span><span class="v">' + (hasPlan ? moneyIn(T.received, t.cur) : '\u2013') + '</span></div><div><span class="k">' + (over ? 'Over by' : 'Left') + '</span><span class="v" style="color:var(--' + (hasPlan ? (over ? 'bad' : 'good') : 'muted') + ')">' + (hasPlan ? moneyIn(Math.abs(T.left), t.cur) : '\u2013') + '</span></div></div>' +
       (hasPlan ? bar(pct(T.spent, T.received), over ? 'bad' : 'good') + '<div class="small muted mono">' + moneyIn(T.perDay, t.cur) + ' a day spent' + (personal ? '' : ' of ' + moneyIn(t.perDiem, t.pdCur || t.cur) + ' per diem') + ' &middot; about ' + money(T.spentHome) + '</div>' : '<div class="note">Set ' + (personal ? 'a budget' : 'your per diem per day') + ' (Edit) to see what is left. About ' + money(T.spentHome) + ' spent so far.</div>') +
+      (personal ? (function () {
+        if (t.fund === 'savings') {
+          const g = (S.profile.goals || []).filter(function (x) { return x.id === t.fundGoal; })[0];
+          const due = Math.round((T.spentHome - (t.fundTaken || 0)) * 100) / 100;
+          return '<div class="kv"><span>Paid from savings' + (g ? ': ' + esc(g.name) : '') + '<span class="small muted" style="display:block">Taken so far ' + money(t.fundTaken || 0) + ' of ' + money(T.spentHome) + '</span>' + (g && due > g.saved ? '<span class="small neg" style="display:block">More than this pot holds (' + money(g.saved) + ')</span>' : '') + '</span>' + (g && due > 0.005 ? '<button class="btn sm" data-act="trip-settle" data-id="' + esc(t.id) + '">Take ' + money(due) + '</button>' : (g ? '<span class="pill good">Settled</span>' : '<span class="small neg">Pot missing</span>')) + '</div>';
+        }
+        return '<div class="small muted">Paid from your salary. It counts in Left from salary.</div>';
+      })() : '') +
       (!personal && t.perDiem > 0 ? (function () {
         const m = tripMoney(t);
         const moveLeft = Math.round((m.left - (t.moved || 0)) * 100) / 100;
@@ -3880,6 +3912,7 @@ function tripSheet(id) {
     '<div class="grid2"><label>Paid only if trip lasts (days)<input id="t-ala" type="number" inputmode="numeric" min="0" value="' + (t && t.alAfter != null ? t.alAfter : 28) + '"></label>' +
     '<label>Tax kept back %<input id="t-alt" type="number" inputmode="decimal" min="0" max="100" value="' + (t && t.alTax ? t.alTax : '') + '" placeholder="0"></label></div></div>' +
     '<div id="t-per"' + (personal ? '' : ' hidden') + '><label>Trip budget (optional, trip currency)<input id="t-b" type="number" inputmode="decimal" step="1" min="0" value="' + (t && t.budget ? t.budget : '') + '"></label></div>' +
+    '<div id="t-fund"' + (personal ? '' : ' hidden') + '><label>How do you pay for this trip?<select id="t-f"><option value="salary"' + (!t || (t.fund || 'salary') === 'salary' ? ' selected' : '') + '>From my salary (counts in Left from salary)</option>' + (S.profile.goals || []).map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'savings' && t.fundGoal === g.id ? ' selected' : '') + '>From savings: ' + esc(g.name) + '</option>'; }).join('') + '</select></label><p class="small muted">Paying by credit card? Choose what will pay the card bill later. The card purchases are still tracked on the card.</p></div>' +
     '<p class="small muted">Everything you spend between the first and last day goes into this trip automatically. Leave the last day empty while you are still away.</p>' +
     '<div class="btns"><button class="btn" data-act="save-trip" data-id="' + esc(id || '') + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (t ? '<button class="btn danger" data-act="del-trip" data-id="' + esc(id) + '">Delete</button>' : '') + '</div></div>');
 }
@@ -4269,6 +4302,8 @@ function onAction(act, el) {
         if (!t) { t = { id: L.uid(), cur: cur }; trips.push(t); }
         t.cur = cur; t.kind = kind; t.pdCur = val('t-pc') === 'home' ? S.profile.currency : cur;
         t.alAmt = kind === 'personal' ? 0 : (numval('t-al') || 0); t.alCur = val('t-alc') === 'trip' ? cur : S.profile.currency; t.alAfter = numval('t-ala'); if (isNaN(t.alAfter)) t.alAfter = 28; t.alTax = numval('t-alt') || 0;
+        const fv = kind === 'personal' ? val('t-f') : 'salary';
+        if (fv.indexOf('g:') === 0) { t.fund = 'savings'; t.fundGoal = fv.slice(2); } else { t.fund = 'salary'; t.fundGoal = ''; }
         t.name = name; t.start = s0; t.end = e0 || null; t.perDiem = kind === 'personal' ? 0 : pd; t.budget = kind === 'personal' ? (numval('t-b') || 0) : 0; t.rate = rate;
         markProfile(); syncAll();
       });
@@ -4321,6 +4356,30 @@ function onAction(act, el) {
     }
     case 'cmp-open': cmpSheet(el.dataset.cat); break;
     case 'pie-step': pieStep(Number(el.dataset.d)); break;
+    case 'trip-settle': {
+      const t = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+      const g = t && (S.profile.goals || []).filter(function (x) { return x.id === t.fundGoal; })[0];
+      if (!t || !g) { toast('Choose a savings pot for this trip first'); break; }
+      const T = L.tripSummary(S.months, t, L.today());
+      const due = Math.round((T.spentHome - (t.fundTaken || 0)) * 100) / 100;
+      if (!(due > 0.005)) break;
+      mutate(function () {
+        g.saved = Math.round((g.saved - due) * 100) / 100;
+        (g.log = g.log || []).push({ d: L.today(), a: -due, n: 'Trip: ' + t.name }); g.log = g.log.slice(-300);
+        t.fundTaken = Math.round(((t.fundTaken || 0) + due) * 100) / 100; markProfile();
+      });
+      render(); toast('Took ' + money(due) + ' from ' + g.name);
+      break;
+    }
+    case 'heat-cat': heatCat = el.dataset.c || ''; render(); break;
+    case 'heat-day': {
+      const e = HEAT.day && HEAT.day[el.dataset.d], box = $('#heatdet');
+      if (!box) break;
+      document.querySelectorAll('.hcd.sel').forEach(function (x) { x.classList.remove('sel'); }); el.classList.add('sel');
+      if (!e) { box.innerHTML = '<b>' + L.dateLabel(el.dataset.d) + '</b> &middot; nothing spent'; break; }
+      box.innerHTML = '<div class="kv"><span><b>' + L.dateLabel(el.dataset.d) + '</b></span><b class="mono">' + money(e.sum, true) + '</b></div>' + e.list.map(function (t) { return '<div class="kv"><span>' + catEmoji(t.c) + ' ' + esc(t.m) + (t.tr ? ' <span class="small muted">trip</span>' : '') + '</span><span class="mono">' + money(t.a, true) + '</span></div>'; }).join('');
+      break;
+    }
     case 'heat-mode': heatTrips = el.dataset.v === 'true'; render(); break;
     case 'heat-cell': {
       const k = el.dataset.cat + '|' + el.dataset.d, v = HEAT.cell && HEAT.cell[k], cap = $('#heatcap');
@@ -5121,7 +5180,7 @@ document.addEventListener('change', function (e) {
     return;
   }
   if (id === 'applink') { mutate(function () { S.profile.appLink = el.value.trim().split('#')[0]; markProfile(); }); const t = $('#tmpl'); if (t) t.textContent = (S.profile.appLink || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]'; return; }
-  if (bind === 't-kind') { const per = el.value === 'personal'; $('#t-biz').hidden = per; $('#t-per').hidden = !per; return; }
+  if (bind === 't-kind') { const per = el.value === 'personal'; $('#t-biz').hidden = per; $('#t-per').hidden = !per; const tf = $('#t-fund'); if (tf) tf.hidden = !per; return; }
   if (id === 'o-cur') { IMP.cur = el.value; return; }
   if (id === 'o-date' || id === 'o-sign') { IMP.opts.dateFmt = val('o-date') || 'auto'; if ($('#o-sign')) IMP.opts.sign = val('o-sign'); runParse(); renderImpBox(); return; }
   if (id === 'f-c') { const r = $('#f-rule'); if (r) r.checked = true; return; }
