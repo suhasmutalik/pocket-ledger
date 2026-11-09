@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 12:51'; window.__BID__ = '2026-11-09 12:51:16';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 12:53'; window.__BID__ = '2026-11-09 12:53:40';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4017,7 +4017,7 @@ function txSheet(id) {
     '<label>Category<select id="f-c" data-bind="f-c">' + catOptions(t.c, true) + '</select></label>' +
     (t.c === 'Income' ? '<label>Income type<select id="f-it">' + incomeTypeOptions(t.it || 'base') + '</select></label>' : '') +
     '<label>Trip<select id="f-tr"><option value="auto"' + (!t.pin ? ' selected' : '') + '>Automatic, by trip dates</option><option value="none"' + (t.pin === 'none' ? ' selected' : '') + '>Everyday spending, not a trip</option>' + (S.profile.trips || []).map(function (x) { return '<option value="' + esc(x.id) + '"' + (t.pin === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
-    '<label>Card<input id="f-card" type="text" value="' + esc(t.card || '') + '" placeholder="Leave empty if not paid by card"></label>' +
+    '<label>Paid from account<select id="f-card"><option value="">Not set</option>' + ACCTS.map(function (x) { return '<option value="' + esc(x[0]) + '"' + (t.card === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + (t.card && !ACCTS.some(function (x) { return x[0] === t.card; }) ? '<option value="' + esc(t.card) + '" selected>' + esc(t.card) + ' (other)</option>' : '') + '</select></label>' +
     tripExtraHTML('f', t) +
     '<label class="inline"><input type="checkbox" id="f-rule"> Always file this merchant under this category</label>' +
     '<p class="small muted" id="f-hint">Use a negative amount for a refund.</p>' +
