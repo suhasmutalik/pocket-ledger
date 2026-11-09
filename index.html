@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:25'; window.__BID__ = '2026-11-08 23:25:11';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:31'; window.__BID__ = '2026-11-08 23:31:12';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3940,7 +3940,8 @@ function cardNames() {
 function fundRows(t) {
   const cf = S.profile.cardFund || {};
   const def = t && t.fund === 'savings' && t.fundGoal ? 'g:' + t.fundGoal : 'salary';
-  return cardNames().map(function (n, i) { return fundSelect('t-cf' + i, cf[n] || def, n); }).join('') + fundSelect('t-f', def, 'Anything else (cash, other cards)');
+  return fundSelect('t-f', def, 'Where does the trip money come from?') +
+    '<details style="margin-top:8px"><summary class="small">Different for each card (optional)</summary><div class="stack" style="margin-top:8px">' + cardNames().map(function (n, i) { return fundSelect('t-cf' + i, cf[n] || def, n); }).join('') + '</div></details>';
 }
 function tripSheet(id) {
   const t = (S.profile.trips || []).filter(function (x) { return x.id === id; })[0];
@@ -3960,7 +3961,7 @@ function tripSheet(id) {
     '<div class="grid2"><label>Paid only if trip lasts (days)<input id="t-ala" type="number" inputmode="numeric" min="0" value="' + (t && t.alAfter != null ? t.alAfter : 28) + '"></label>' +
     '<label>Tax kept back %<input id="t-alt" type="number" inputmode="decimal" min="0" max="100" value="' + (t && t.alTax ? t.alTax : '') + '" placeholder="0"></label></div></div>' +
     '<div id="t-per"' + (personal ? '' : ' hidden') + '><label>Trip budget (optional, trip currency)<input id="t-b" type="number" inputmode="decimal" step="1" min="0" value="' + (t && t.budget ? t.budget : '') + '"></label></div>' +
-    '<div id="t-fund"' + (personal ? '' : ' hidden') + '><b>How do you pay for this trip?</b><p class="small muted" style="margin:2px 0 8px">Choose what each card or account is paid from. When you tap or log a purchase, the money is taken from there.</p>' + fundRows(t) + '</div>' +
+    '<div id="t-fund"' + (personal ? '' : ' hidden') + '><p class="small muted" style="margin:0 0 8px">Most people choose My salary. Choose a savings pot only if you pay for the trip from savings.</p>' + fundRows(t) + '</div>' +
     '<p class="small muted">Everything you spend between the first and last day goes into this trip automatically. Leave the last day empty while you are still away.</p>' +
     '<div class="btns"><button class="btn" data-act="save-trip" data-id="' + esc(id || '') + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (t ? '<button class="btn danger" data-act="del-trip" data-id="' + esc(id) + '">Delete</button>' : '') + '</div></div>');
 }
@@ -4350,8 +4351,8 @@ function onAction(act, el) {
         if (!t) { t = { id: L.uid(), cur: cur }; trips.push(t); }
         t.cur = cur; t.kind = kind; t.pdCur = val('t-pc') === 'home' ? S.profile.currency : cur;
         t.alAmt = kind === 'personal' ? 0 : (numval('t-al') || 0); t.alCur = val('t-alc') === 'trip' ? cur : S.profile.currency; t.alAfter = numval('t-ala'); if (isNaN(t.alAfter)) t.alAfter = 28; t.alTax = numval('t-alt') || 0;
-        if (kind === 'personal') { const cf = S.profile.cardFund = S.profile.cardFund || {}; cardNames().forEach(function (n, i) { const v = val('t-cf' + i); if (v) cf[n] = v; }); }
         const fv = kind === 'personal' ? val('t-f') : 'salary';
+        if (kind === 'personal') { const cf = S.profile.cardFund = S.profile.cardFund || {}; cardNames().forEach(function (n, i) { const v = val('t-cf' + i); if (!v || v === fv) delete cf[n]; else cf[n] = v; }); }
         if (fv.indexOf('g:') === 0) { t.fund = 'savings'; t.fundGoal = fv.slice(2); } else { t.fund = 'salary'; t.fundGoal = ''; }
         t.name = name; t.start = s0; t.end = e0 || null; t.perDiem = kind === 'personal' ? 0 : pd; t.budget = kind === 'personal' ? (numval('t-b') || 0) : 0; t.rate = rate;
         markProfile(); syncAll();
