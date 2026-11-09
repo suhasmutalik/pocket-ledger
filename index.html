@@ -610,6 +610,15 @@ svg.heat { width: 100%; height: auto; display: block; }
 .hm-leg { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .hm-leg i { display: inline-block; width: 18px; height: 12px; border-radius: 3px; }
 
+.calc-d { background: var(--w06); border-radius: 16px; padding: 12px 16px; text-align: right; min-height: 76px; display: flex; flex-direction: column; justify-content: center; gap: 4px; overflow: hidden; }
+.calc-e { font-size: 22px; word-break: break-all; color: var(--ink); }
+.calc-r { font-size: 28px; font-weight: 600; color: var(--accent, var(--ink)); min-height: 34px; }
+.calc-g { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.calc-k { display: flex; align-items: center; justify-content: center; padding: 0; text-align: center; height: 52px; border-radius: 14px; border: 0; background: var(--w07); color: var(--ink); font: inherit; font-size: 22px; font-weight: 500; }
+.calc-k:active { transform: scale(.96); background: var(--w08); }
+.calc-k.op { background: rgba(60, 190, 130, .28); color: var(--ink); font-weight: 700; }
+.calc-k.fn { color: #E5604D; }
+
 </style>
 </head>
 <body>
@@ -622,7 +631,7 @@ svg.heat { width: 100%; height: auto; display: block; }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:34'; window.__BID__ = '2026-11-08 16:34:16';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:09'; window.__BID__ = '2026-11-08 21:09:33';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3510,7 +3519,7 @@ function addHTML() {
   return appear + '<section><h2>Quick add</h2><div class="card pad stack"><label>Merchant and amount<input id="qa" type="text" placeholder="Blue Bottle 5.50" autocomplete="off"></label>' +
     '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button>' + (function () { const lm = lastManual(); return lm ? '<button class="btn ghost" data-act="repeat-last">Repeat: ' + esc(lm.m.length > 16 ? lm.m.slice(0, 15) + '…' : lm.m) + ' ' + (lm.oa != null && lm.oc ? moneyIn(lm.oa, lm.oc) : money(lm.a)) + '</button>' : ''; })() + '</div><div class="small muted" id="qahint">Type, or tap the microphone key on your keyboard and say, for example, Blue Bottle five fifty.</div></div></section>' +
     '<section><h2>Add with details</h2><div class="card pad stack" id="addcard">' +
-    '<div class="seg" style="grid-template-columns:repeat(2,1fr)">' + [['expense', 'Expense (money out)'], ['income', 'Income (money in)']].map(function (x) { return '<button data-act="add-kind" data-v="' + x[0] + '" aria-pressed="' + (addKind === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+    '<div class="btns" style="margin:0"><button class="btn ghost sm" data-act="calc-open">\u{1F9EE} Calculator</button></div><div class="seg" style="grid-template-columns:repeat(2,1fr)">' + [['expense', 'Expense (money out)'], ['income', 'Income (money in)']].map(function (x) { return '<button data-act="add-kind" data-v="' + x[0] + '" aria-pressed="' + (addKind === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' +
     '<div class="grid2"><label>Amount<input id="n-a" type="number" inputmode="decimal" step="0.01" placeholder="0.00"></label><label>Date<input id="n-d" type="date" value="' + L.today() + '"></label></div>' +
     (S.profile.fx && S.profile.fx.cur ? '<label>Paid in<select id="n-cur">' + [S.profile.currency, S.profile.fx.cur].map(function (c) { return '<option' + (c === defaultEntryCur() ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label><p class="small muted">An entry in the second currency goes to your trip.</p>' : '') +
     '<label><span id="n-ml">' + (addKind === 'income' ? 'Who paid you?' : 'Merchant') + '</span><input id="n-m" type="text" placeholder="' + (addKind === 'income' ? 'For example Salary' : 'Where did it go?') + '"></label>' +
@@ -3685,6 +3694,67 @@ function catSheet() {
   openSheet('<h3>New category</h3><div class="stack"><label>Name<input id="c-n" type="text" placeholder="Pets"></label>' +
     '<label>Kind<select id="c-t"><option value="variable">Variable: changes month to month</option><option value="fixed">Fixed: the same bill each month</option></select></label>' +
     '<div class="btns"><button class="btn" data-act="save-cat">Add</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+}
+/* ---------- small calculator ---------- */
+const CALC = { e: '' };
+function calcEval(src) {
+  const s = src.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/,/g, '.').replace(/\s+/g, '');
+  if (!s) return null;
+  let i = 0;
+  const peek = function () { return s[i]; };
+  function num() {
+    let j = i; while (j < s.length && /[0-9.]/.test(s[j])) j++;
+    if (j === i) throw new Error('x');
+    const v = parseFloat(s.slice(i, j)); if (isNaN(v)) throw new Error('x'); i = j; return v;
+  }
+  function factor() {
+    let v, pct = false;
+    if (peek() === '-') { i++; const f = factor(); return { v: -f.v, pct: false }; }
+    if (peek() === '+') { i++; return factor(); }
+    if (peek() === '(') { i++; v = expr(); if (peek() !== ')') throw new Error('x'); i++; } else v = num();
+    while (peek() === '%') { i++; v = v / 100; pct = true; }
+    return { v: v, pct: pct };
+  }
+  function term() {
+    let f = factor(), v = f.v, single = f.pct;
+    while (peek() === '*' || peek() === '/') {
+      const op = s[i++]; const r = factor(); single = false;
+      if (op === '*') v *= r.v; else { if (r.v === 0) throw new Error('div'); v /= r.v; }
+    }
+    return { v: v, pct: single };
+  }
+  function expr() {
+    let t = term(), v = t.v;
+    while (peek() === '+' || peek() === '-') {
+      const op = s[i++]; const r = term();
+      const add = r.pct ? v * r.v : r.v;
+      v = op === '+' ? v + add : v - add;
+    }
+    return v;
+  }
+  const out = expr(); if (i < s.length) throw new Error('x'); return out;
+}
+function calcFmt(v) {
+  if (v === null || !isFinite(v)) return '';
+  const r = Math.round(v * 1e8) / 1e8;
+  return r.toLocaleString('en-US', { maximumFractionDigits: 8 }).replace(/,/g, '');
+}
+function calcResult() {
+  try { const v = calcEval(CALC.e); return v === null ? { t: '', v: null } : { t: calcFmt(v), v: v }; } catch (er) { return { t: er.message === 'div' ? 'Cannot divide by zero' : '', v: null, err: er.message === 'div' }; }
+}
+function calcPaint() {
+  const e = $('#calc-e'), r = $('#calc-r'); if (!e || !r) return;
+  e.textContent = CALC.e || '0';
+  const res = calcResult();
+  r.textContent = res.t ? (res.err ? res.t : '= ' + res.t) : ' ';
+}
+function calcSheet() {
+  const K = [['C', 'clr'], ['(', '('], [')', ')'], ['⌫', 'bs'], ['7', '7'], ['8', '8'], ['9', '9'], ['÷', '÷'], ['4', '4'], ['5', '5'], ['6', '6'], ['×', '×'], ['1', '1'], ['2', '2'], ['3', '3'], ['−', '−'], ['0', '0'], ['.', '.'], ['%', '%'], ['+', '+']];
+  openSheet('<h3>Calculator</h3><div class="stack"><div class="calc-d"><div id="calc-e" class="calc-e"></div><div id="calc-r" class="calc-r"> </div></div>' +
+    '<div class="calc-g">' + K.map(function (k) { return '<button class="calc-k' + (/[÷×−+]/.test(k[0]) ? ' op' : k[0] === 'C' || k[0] === '⌫' ? ' fn' : '') + '" data-act="calc-key" data-k="' + k[1] + '">' + k[0] + '</button>'; }).join('') + '</div>' +
+    '<div class="btns"><button class="btn" data-act="calc-eq">=</button><button class="btn ghost" data-act="calc-use">Use as amount</button><button class="btn ghost" data-act="sheet-close">Close</button></div>' +
+    '<p class="small muted" style="margin:0">Tip: 200 + 10% adds ten percent. Splitting a bill? Try 86.40 ÷ 3.</p></div>');
+  calcPaint();
 }
 function isMine(name) { return (S.profile.cats || []).some(function (x) { return x.name === name; }); }
 function catEditSheet(name) {
@@ -4035,6 +4105,21 @@ function onAction(act, el) {
       break;
     }
     case 'flow-pick': closeSheet(); catSel = el.dataset.cat; render(); break;
+    case 'calc-open': calcSheet(); break;
+    case 'calc-key': {
+      const k = el.dataset.k;
+      if (k === 'clr') CALC.e = ''; else if (k === 'bs') CALC.e = CALC.e.slice(0, -1);
+      else { if (CALC.fresh && /[0-9.(]/.test(k)) CALC.e = ''; CALC.e += k; }
+      CALC.fresh = false; calcPaint(); break;
+    }
+    case 'calc-eq': { const r = calcResult(); if (r.v !== null) { CALC.e = calcFmt(r.v); CALC.fresh = true; } calcPaint(); break; }
+    case 'calc-use': {
+      const r = calcResult();
+      if (r.v === null || !(r.v > 0)) { toast('Work out an amount first'); break; }
+      const f = $('#n-a'); closeSheet();
+      if (f) { f.value = (Math.round(r.v * 100) / 100).toFixed(2); f.focus(); toast('Amount filled in'); } else toast('Open the Add tab to use it');
+      break;
+    }
     case 'cmp-open': cmpSheet(el.dataset.cat); break;
     case 'pie-step': pieStep(Number(el.dataset.d)); break;
     case 'heat-cell': {
