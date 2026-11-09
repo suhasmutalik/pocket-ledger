@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:54'; window.__BID__ = '2026-11-08 23:54:16';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:57'; window.__BID__ = '2026-11-08 23:57:25';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1621,6 +1621,7 @@ function totals(months, key) {
   txIn(months, key).forEach(function (t) {
     if (t.tr) { if (t.c !== 'Income' && t.c !== 'Transfer' && t.a > 0 && !t.reimb) tripSpent += t.a; return; }
     count++;
+    if (t.reimb && t.c !== 'Income') return;
     if (t.src === 'perdiem') { perdiem += -t.a; return; }
     if (t.c === 'Income') { if (t.it && t.it !== 'base') extraBy[t.it] = (extraBy[t.it] || 0) + -t.a; else income += -t.a; return; }
     if (t.c === 'Transfer') return;
@@ -5380,6 +5381,27 @@ function fixSavingsMoves() {
   mutate(function () { bad.forEach(function (b) { b[1].c = 'Transfer'; markMonth(b[0]); }); });
   setTimeout(function () { toast('Marked ' + bad.length + ' moves between your own accounts and card payments as transfers'); render(); }, 600);
 }
+function tidyOnce() {
+  if (demo || VIEWING || (S.profile.tidy || 0) >= 1) return;
+  let n = 0;
+  const bills = (S.profile.bills || []);
+  mutate(function () {
+    Object.keys(S.months).forEach(function (k) {
+      const m = S.months[k], arr = Array.isArray(m) ? m : (m && (m.tx || m.txs)); if (!arr) return;
+      for (let j = arr.length - 1; j >= 0; j--) {
+        const t = arr[j];
+        if (/saily/i.test(t.m || '') && t.a > 0 && !t.reimb) { t.reimb = true; n++; markMonth(k); }
+        else if (t.src === 'import' && /^\s*wise\s*$/i.test(t.m || '') && t.c !== 'Transfer') { t.c = 'Transfer'; n++; markMonth(k); }
+        else if (t.src === 'statement' && t.a > 0 && /^apple\.com\/bill/i.test(t.m || '') && bills.some(function (b) { return /icloud|apple/i.test(b.name) && Math.abs(b.amount - t.a) < 0.02; }) && arr.some(function (x) { return x.src === 'bill' && /icloud|apple/i.test(x.m || '') && Math.abs(x.a - t.a) < 0.02 && Math.abs(L.daysBetween(x.d, t.d)) <= 12; })) { arr.splice(j, 1); n++; markMonth(k); }
+        else if (t.src === 'import' && /basispakket|abn amro bank n\.v\./i.test(t.m || '') && t.a > 0 && t.c !== 'Transfer') { arr.splice(j, 1); n++; markMonth(k); }
+      }
+    });
+    S.profile.reimbKeys = S.profile.reimbKeys || [];
+    if (S.profile.reimbKeys.indexOf('saily') < 0) S.profile.reimbKeys.push('saily');
+    S.profile.tidy = 1; markProfile();
+  });
+  if (n) setTimeout(function () { toast('Tidied ' + n + ' entries: Saily marked as paid back, Wise top-up and double bank fees removed'); render(); }, 700);
+}
 async function boot() {
   const name = location.hash.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0) tab = name;
@@ -5389,7 +5411,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves();
+  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
