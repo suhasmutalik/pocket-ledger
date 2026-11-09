@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:08'; window.__BID__ = '2026-11-08 22:08:42';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:15'; window.__BID__ = '2026-11-08 22:15:55';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -930,7 +930,8 @@ function parseStatement(text, opts, rules, existing) {
     const raw = descCol >= 0 ? String(r[descCol] || '') : '';
     const m = cleanMerchant(cleanBankDesc(raw));
     let c = categorize(raw + ' ' + m, rules);
-    if (a < 0 && c === 'Other') c = 'Income';
+    if (/oranje\s*spaar|spaarrekening/i.test(m)) c = 'Transfer';
+    else if (a < 0 && c === 'Other') c = 'Income';
     if (a > 0 && c === 'Income') c = 'Other';
     a = Math.round(a * 100) / 100;
     const t = { d: d, m: m, a: a, c: c };
@@ -5021,6 +5022,17 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 
+function fixSavingsMoves() {
+  if (demo || VIEWING) return;
+  const bad = [];
+  Object.keys(S.months).forEach(function (k) {
+    const m = S.months[k], arr = Array.isArray(m) ? m : (m && (m.tx || m.txs)); if (!arr) return;
+    arr.forEach(function (t) { if (t.src === 'import' && t.c !== 'Transfer' && !t.tr && /oranje\s*spaar|spaarrekening/i.test(t.m || '')) bad.push([k, t]); });
+  });
+  if (!bad.length) return;
+  mutate(function () { bad.forEach(function (b) { b[1].c = 'Transfer'; markMonth(b[0]); }); });
+  setTimeout(function () { toast('Marked ' + bad.length + ' moves to your savings as transfers, not income'); render(); }, 600);
+}
 async function boot() {
   const name = location.hash.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0) tab = name;
@@ -5030,7 +5042,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); splitRent(); ensureBills(); ensureEvents();
+  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
