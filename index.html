@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:43'; window.__BID__ = '2026-11-08 23:43:43';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:47'; window.__BID__ = '2026-11-08 23:47:59';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2215,14 +2215,16 @@ function dupWords(m) { return String(m || '').toLowerCase().replace(/[^a-z]+/g, 
 function findDups() {
   const all = allTx(), used = {}, out = [];
   const imps = all.filter(function (t) { return t.src === 'import' && t.a > 0 && t.c !== 'Transfer' && t.oa == null; });
-  const mine = all.filter(function (t) { return (t.src === 'sheet' || t.src === 'manual' || t.src === 'tap') && t.a > 0 && t.c !== 'Transfer'; });
+  const mine = all.filter(function (t) { return (t.src === 'sheet' || t.src === 'manual' || t.src === 'tap' || t.src === 'bill') && t.a > 0 && t.c !== 'Transfer'; });
   const day = function (d) { const p = d.split('-').map(Number); return Date.UTC(p[0], p[1] - 1, p[2]) / 864e5; };
   imps.forEach(function (i) {
-    const iw = dupWords(i.m); if (!iw.length) return;
+    const iw = dupWords(i.m);
     let best = null, bd = 9;
     mine.forEach(function (o) {
       if (used[o.id] || (o.card && L.isCredit(S.profile, o.card))) return;
-      const dd = Math.abs(day(i.d) - day(o.d)); if (dd > 3) return;
+      const bill = o.src === 'bill', dd = Math.abs(day(i.d) - day(o.d)); if (dd > (bill ? 7 : 3)) return;
+      if (bill) { if (Math.abs(i.a - o.a) > Math.max(0.5, 0.01 * o.a) || i.a < 20) return; const sc2 = dd * 0.5 + Math.abs(i.a - o.a); if (sc2 < bd) { bd = sc2; best = o; } return; }
+      if (!iw.length) return;
       const near = Math.abs(i.a - o.a) <= Math.max(0.3, 0.035 * o.a) || (o.oa != null && Math.abs(i.a - o.oa) <= 0.02);
       if (!near) return;
       const ow = dupWords(o.m); if (!ow.some(function (w) { return iw.indexOf(w) >= 0; })) return;
@@ -2235,8 +2237,8 @@ function findDups() {
 function dupOpen() {
   DUPS = findDups();
   if (!DUPS.length) { openSheet('<h3>No duplicates found</h3><p class="small muted">No imported purchase matches something you logged yourself.</p><div class="btns"><button class="btn ghost" data-act="sheet-close">Close</button></div>'); return; }
-  openSheet('<h3>' + DUPS.length + ' purchases are in twice</h3><p class="small muted">Each one is in your ledger from the bank import and from what you logged. I remove the bank copy and keep yours (it has the trip and dollar amount).</p>' +
-    '<div class="list">' + DUPS.map(function (d) { return '<div class="kv"><span>' + esc(d.mine.m) + '<span class="small muted" style="display:block">' + L.dateLabel(d.mine.d) + ' &middot; yours ' + money(d.mine.a, true) + ' &middot; bank copy ' + money(d.imp.a, true) + '</span></span><span class="small muted">remove bank copy</span></div>'; }).join('') + '</div>' +
+  openSheet('<h3>' + DUPS.length + ' purchases are in twice</h3><p class="small muted">Each one is in your ledger from the bank import and also from something you logged or a scheduled bill (rent, NS...). I remove the bank copy and keep the other one.</p>' +
+    '<div class="list">' + DUPS.map(function (d) { return '<div class="kv"><span>' + esc(d.mine.m) + '<span class="small muted" style="display:block">' + L.dateLabel(d.mine.d) + ' &middot; ' + (d.mine.src === 'bill' ? 'scheduled bill ' : 'yours ') + money(d.mine.a, true) + ' &middot; bank copy ' + money(d.imp.a, true) + '</span></span><span class="small muted">remove bank copy</span></div>'; }).join('') + '</div>' +
     '<div class="btns"><button class="btn" data-act="dup-go">Remove ' + DUPS.length + ' copies</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div>');
 }
 function dupGo() {
