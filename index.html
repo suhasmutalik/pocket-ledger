@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:31'; window.__BID__ = '2026-11-08 23:31:12';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:39'; window.__BID__ = '2026-11-08 23:39:01';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1619,7 +1619,7 @@ function totals(months, key) {
   let spent = 0, income = 0, perdiem = 0, count = 0, tripSpent = 0;
   const extraBy = {};
   txIn(months, key).forEach(function (t) {
-    if (t.tr) { if (t.c !== 'Income' && t.c !== 'Transfer' && t.a > 0) tripSpent += t.a; return; }
+    if (t.tr) { if (t.c !== 'Income' && t.c !== 'Transfer' && t.a > 0 && !t.reimb) tripSpent += t.a; return; }
     count++;
     if (t.src === 'perdiem') { perdiem += -t.a; return; }
     if (t.c === 'Income') { if (t.it && t.it !== 'base') extraBy[t.it] = (extraBy[t.it] || 0) + -t.a; else income += -t.a; return; }
@@ -1664,6 +1664,7 @@ function autoLimit(profile, months, cat, key) {
 /* Where the money for one trip purchase comes from: 'salary' or 'g:<savings pot id>'. The card used decides; trips have a fallback. */
 function fundOf(profile, trip, t) {
   const m = (profile && profile.cardFund) || {};
+  if (t && t.fund) return t.fund;
   if (t && t.card && m[t.card]) return m[t.card];
   return trip && trip.fund === 'savings' && trip.fundGoal ? 'g:' + trip.fundGoal : 'salary';
 }
@@ -1671,7 +1672,7 @@ function personalTripSpend(profile, months, key) {
   const trips = {};
   ((profile && profile.trips) || []).forEach(function (x) { if (x.kind === 'personal') trips[x.id] = x; });
   let sum = 0;
-  txIn(months, key).forEach(function (t) { if (t.tr && trips[t.tr] && t.c !== 'Income' && t.c !== 'Transfer' && fundOf(profile, trips[t.tr], t) === 'salary') sum += Number(t.a) || 0; });
+  txIn(months, key).forEach(function (t) { if (t.tr && trips[t.tr] && t.c !== 'Income' && t.c !== 'Transfer' && !t.reimb && fundOf(profile, trips[t.tr], t) === 'salary') sum += Number(t.a) || 0; });
   return Math.round(sum * 100) / 100;
 }
 function monthSummary(profile, months, key) {
@@ -1735,19 +1736,20 @@ function tripSummary(months, trip, todayStr) {
   let end = trip.end || todayStr;
   if (end < trip.start) end = trip.start;
   const days = daysBetween(trip.start, end) + 1;
-  let spent = 0, spentHome = 0, count = 0;
+  let spent = 0, spentHome = 0, count = 0, reimb = 0, reimbHome = 0;
   const byCat = {};
   Object.keys(months).forEach(function (k) {
     months[k].forEach(function (t) {
       if (t.tr !== trip.id || t.c === 'Transfer' || t.c === 'Income') return;
       count++;
       const v = (t.oc === trip.cur && t.oa != null) ? t.oa : (trip.rate > 0 ? t.a / trip.rate : t.a);
+      if (t.reimb) { reimb += v; reimbHome += t.a; return; }
       spent += v; spentHome += t.a; byCat[t.c] = (byCat[t.c] || 0) + v;
     });
   });
   const pdHome = trip.pdCur && trip.pdCur !== trip.cur && trip.rate > 0;
   const received = personal ? (trip.budget || 0) : (pdHome ? (trip.perDiem || 0) * days / trip.rate : (trip.perDiem || 0) * days);
-  return { days: days, spent: spent, spentHome: spentHome, count: count, byCat: byCat, received: received, left: received - spent, perDay: spent / days, end: end };
+  return { days: days, spent: spent, spentHome: spentHome, reimb: reimb, reimbHome: reimbHome, count: count, byCat: byCat, received: received, left: received - spent, perDay: spent / days, end: end };
 }
 
 function tripAllowance(trip, todayStr) {
@@ -2208,7 +2210,7 @@ function recentImportIds(mins) {
   return out;
 }
 function undoAdd(id) {
-  return function () { mutate(function () { const f = findTx(id); if (f) { f.arr.splice(f.j, 1); markMonth(f.k); } }); render(); toast('Removed'); refreshRepeat(); };
+  return function () { mutate(function () { const f = findTx(id); if (f) { potGive(f.t); f.arr.splice(f.j, 1); markMonth(f.k); } }); render(); toast('Removed'); refreshRepeat(); };
 }
 function repeatLabel(lm) { return 'Repeat: ' + (lm.m.length > 16 ? lm.m.slice(0, 15) + '\u2026' : lm.m) + ' ' + (lm.oa != null && lm.oc ? moneyIn(lm.oa, lm.oc, true) : money(lm.a, true)); }
 function refreshRepeat() {
@@ -2324,8 +2326,35 @@ function syncAll() {
     if (ch) markMonth(k);
   });
 }
+function goalById(id) { return (S.profile.goals || []).filter(function (g) { return g.id === id; })[0]; }
+function tripOf(t) { return t && t.tr ? (S.profile.trips || []).filter(function (x) { return x.id === t.tr; })[0] : null; }
+function potTake(t) {
+  if (t.fundDone || !t.fund || t.fund.indexOf('g:') !== 0 || !(Number(t.a) > 0)) return;
+  const tr = tripOf(t), g = goalById(t.fund.slice(2));
+  if (!tr || tr.kind !== 'personal' || !g || t.reimb) return;
+  const amt = Math.round(t.a * 100) / 100;
+  g.saved = Math.round((g.saved - amt) * 100) / 100;
+  (g.log = g.log || []).push({ d: t.d, a: -amt, n: 'Trip ' + tr.name + ': ' + t.m }); g.log = g.log.slice(-300);
+  t.fundDone = true; t.fundAmt = amt; markProfile();
+}
+function potGive(t) {
+  if (!t.fundDone) return;
+  const g = goalById((t.fund || '').slice(2));
+  if (g) { g.saved = Math.round((g.saved + (t.fundAmt || 0)) * 100) / 100; (g.log = g.log || []).push({ d: L.today(), a: t.fundAmt || 0, n: 'Put back: ' + t.m }); g.log = g.log.slice(-300); }
+  delete t.fundDone; delete t.fundAmt; markProfile();
+}
+function tripExtraHTML(pre, t) {
+  const goals = S.profile.goals || [];
+  return '<details class="fold"' + (t && (t.reimb || t.fund) ? ' open' : '') + '><summary class="small" style="cursor:pointer">Trip options</summary><div class="stack" style="margin-top:8px">' +
+    '<label class="inline"><input type="checkbox" id="' + pre + '-rb"' + (t && t.reimb ? ' checked' : '') + '> Employer pays this back (Uber, eSIM, train...)</label>' +
+    (goals.length ? '<label>Paid from<select id="' + pre + '-fund"><option value="">Normal (salary or bank)</option>' + goals.map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'g:' + g.id ? ' selected' : '') + '>' + esc(g.name) + ' (savings, ' + money(g.saved) + ')</option>'; }).join('') + '</select></label><p class="small muted">Savings is only taken for personal trips.</p>' : '') +
+    '</div></details>';
+}
 function addTx(t) {
   syncTx(t);
+  const tr = tripOf(t);
+  if (t.reimb === undefined && tr && tr.kind === 'business' && (S.profile.reimbKeys || []).indexOf(L.ruleKey(t.m)) >= 0) t.reimb = true;
+  potTake(t);
   const k = L.monthKey(t.d);
   (S.months[k] = S.months[k] || []).push(t);
   markMonth(k);
@@ -2584,7 +2613,7 @@ function catIcon(t) {
 function txRow(t) {
   const inc = t.c === 'Income';
   return '<button class="tx" data-act="edit-tx" data-id="' + esc(t.id) + '">' + catIcon(t) + '<span class="tx-main"><span class="tx-m">' + esc(t.m) + '</span>' +
-    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.card ? '<span class="tag">' + (L.isCredit(S.profile, t.card) ? 'Credit card' : esc(t.card)) + '</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.c === 'Income' && t.it && t.it !== 'base' ? '<span class="tag">' + incomeTypeName(t.it) + '</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
+    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.reimb ? '<span class="tag">Paid back</span>' : '') + (t.fundDone ? '<span class="tag">From savings</span>' : '') + (t.card ? '<span class="tag">' + (L.isCredit(S.profile, t.card) ? 'Credit card' : esc(t.card)) + '</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.c === 'Income' && t.it && t.it !== 'base' ? '<span class="tag">' + incomeTypeName(t.it) + '</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
     '<span class="amt mono' + (t.a < 0 ? ' pos' : '') + '">' + (t.a < 0 ? '+' : '') + money(Math.abs(t.a), true) + (t.oc ? '<span class="tx-sub" style="display:block;text-align:right">' + esc(t.oc) + ' ' + Number(t.oa).toFixed(2) + '</span>' : '') + '</span></button>';
 }
 
@@ -3449,15 +3478,17 @@ function tripsHTML() {
       '<div class="sums" style="margin:0 -14px"><div><span class="k">Spent</span><span class="v">' + moneyIn(T.spent, t.cur) + '</span></div><div><span class="k">' + (personal ? 'Budget' : 'Per diem') + '</span><span class="v">' + (hasPlan ? moneyIn(T.received, t.cur) : '\u2013') + '</span></div><div><span class="k">' + (over ? 'Over by' : 'Left') + '</span><span class="v" style="color:var(--' + (hasPlan ? (over ? 'bad' : 'good') : 'muted') + ')">' + (hasPlan ? moneyIn(Math.abs(T.left), t.cur) : '\u2013') + '</span></div></div>' +
       (hasPlan ? bar(pct(T.spent, T.received), over ? 'bad' : 'good') + '<div class="small muted mono">' + moneyIn(T.perDay, t.cur) + ' a day spent' + (personal ? '' : ' of ' + moneyIn(t.perDiem, t.pdCur || t.cur) + ' per diem') + ' &middot; about ' + money(T.spentHome) + '</div>' : '<div class="note">Set ' + (personal ? 'a budget' : 'your per diem per day') + ' (Edit) to see what is left. About ' + money(T.spentHome) + ' spent so far.</div>') +
       (personal ? (function () {
-        const F = tripFundDue(t);
-        const pots = Object.keys(F);
-        if (!pots.length) return '<div class="small muted">Paid from your salary. It counts in Left from salary' + (T.spentHome > 0 ? ' (' + money(personalSalarySpend(t)) + ' so far).' : '.') + '</div>';
-        return '<div class="small muted">Salary part: ' + money(personalSalarySpend(t)) + ' (counts in Left from salary)</div>' + pots.map(function (gid) {
-          const g = (S.profile.goals || []).filter(function (x) { return x.id === gid; })[0], f = F[gid];
-          const due = Math.round((f.total - f.taken) * 100) / 100;
-          return '<div class="kv"><span>From savings' + (g ? ': ' + esc(g.name) : '') + '<span class="small muted" style="display:block">Taken ' + money(f.taken) + ' of ' + money(f.total) + '</span>' + (g && due > g.saved ? '<span class="small neg" style="display:block">More than this pot holds (' + money(g.saved) + ')</span>' : '') + '</span>' + (g && due > 0.005 ? '<button class="btn sm" data-act="trip-settle" data-id="' + esc(t.id) + '" data-g="' + esc(gid) + '">Take ' + money(due) + '</button>' : (g ? '<span class="pill good">Settled</span>' : '<span class="small neg">Pot missing</span>')) + '</div>';
-        }).join('');
+        const F = tripFundDue(t), src = {};
+        Object.keys(S.months).forEach(function (k) { S.months[k].forEach(function (x) { if (x.tr !== t.id || x.c === 'Income' || x.c === 'Transfer' || x.reimb) return; const f = L.fundOf(S.profile, t, x); src[f] = (src[f] || 0) + (Number(x.a) || 0); }); });
+        const keys = Object.keys(src).sort();
+        if (!keys.length) return '';
+        return '<div class="small muted" style="margin-top:4px"><b>Paid from</b></div>' + keys.map(function (f) {
+          const gid = f.indexOf('g:') === 0 ? f.slice(2) : '', g = gid ? goalById(gid) : null;
+          const e = gid ? F[gid] : null, due = e ? Math.round((e.total - e.taken) * 100) / 100 : 0;
+          return '<div class="kv"><span>' + (gid ? (g ? esc(g.name) + ' (savings)' : 'Savings pot missing') : 'Salary / bank') + (gid && g && due > g.saved ? '<span class="small neg" style="display:block">Pot only holds ' + money(g.saved) + '</span>' : '') + '</span><span class="mono"><b>' + money(src[f]) + '</b>' + (g && due > 0.005 ? ' <button class="btn sm" data-act="trip-settle" data-id="' + esc(t.id) + '" data-g="' + esc(gid) + '">Take ' + money(due) + '</button>' : '') + '</span></div>';
+        }).join('') + '<div class="small muted">Salary part counts in Left from salary. Savings amounts have been taken from the pot.</div>';
       })() : '') +
+      (T.reimb > 0.005 ? '<div class="kv"><span>Employer pays back<span class="small muted" style="display:block">Not counted in your spending</span></span><span class="mono"><b>' + moneyIn(T.reimb, t.cur) + '</b>' + (t.cur !== S.profile.currency ? ' <span class="small muted">about ' + money(T.reimbHome) + '</span>' : '') + '</span></div>' : '') +
       (!personal && t.perDiem > 0 ? (function () {
         const m = tripMoney(t);
         const moveLeft = Math.round((m.left - (t.moved || 0)) * 100) / 100;
@@ -3771,6 +3802,7 @@ function addHTML() {
     '<label><span id="n-ml">' + (addKind === 'income' ? 'Who paid you?' : 'Merchant') + '</span><input id="n-m" type="text" placeholder="' + (addKind === 'income' ? 'For example Salary' : 'Where did it go?') + '"></label>' +
     '<label class="kx"' + (addKind === 'income' ? ' style="display:none"' : '') + '>Category<select id="n-c"><option value="">Pick automatically</option>' + catOptions('', true).replace('<option>Income</option>', '') + '</select></label>' +
     '<label class="ki"' + (addKind === 'income' ? '' : ' style="display:none"') + '>Type of income<select id="n-it">' + incomeTypeOptions('base') + '</select></label>' +
+    '<div class="kx"' + (addKind === 'income' ? ' style="display:none"' : '') + '>' + tripExtraHTML('n', null) + '</div>' +
     '<div class="btns"><button class="btn" data-act="add-tx" id="n-go">' + (addKind === 'income' ? 'Add income' : 'Add expense') + '</button></div></div></section>' +
     scanSectionHTML() +
     '<section><h2>Import a statement</h2><div class="card pad stack">' +
@@ -3906,6 +3938,7 @@ function txSheet(id) {
     (t.c === 'Income' ? '<label>Income type<select id="f-it">' + incomeTypeOptions(t.it || 'base') + '</select></label>' : '') +
     '<label>Trip<select id="f-tr"><option value="auto"' + (!t.pin ? ' selected' : '') + '>Automatic, by trip dates</option><option value="none"' + (t.pin === 'none' ? ' selected' : '') + '>Everyday spending, not a trip</option>' + (S.profile.trips || []).map(function (x) { return '<option value="' + esc(x.id) + '"' + (t.pin === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
     '<label>Card<input id="f-card" type="text" value="' + esc(t.card || '') + '" placeholder="Leave empty if not paid by card"></label>' +
+    (t.tr ? tripExtraHTML('f', t) : '') +
     '<label class="inline"><input type="checkbox" id="f-rule"> Always file this merchant under this category</label>' +
     '<p class="small muted" id="f-hint">Use a negative amount for a refund.</p>' +
     '<div class="btns"><button class="btn" data-act="save-tx" data-id="' + esc(id) + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button><button class="btn danger" data-act="del-tx" data-id="' + esc(id) + '">Delete</button></div></div>');
@@ -3916,7 +3949,7 @@ function tripFundDue(t) {
   if (!t.taken && t.fundTaken && t.fundGoal) taken[t.fundGoal] = t.fundTaken;
   Object.keys(S.months).forEach(function (k) {
     S.months[k].forEach(function (x) {
-      if (x.tr !== t.id || x.c === 'Income' || x.c === 'Transfer') return;
+      if (x.tr !== t.id || x.c === 'Income' || x.c === 'Transfer' || x.reimb || x.fundDone) return;
       const f = L.fundOf(S.profile, t, x);
       if (f.indexOf('g:') !== 0) return;
       const gid = f.slice(2), e = out[gid] = out[gid] || { total: 0, taken: Math.round((taken[gid] || 0) * 100) / 100 };
@@ -3927,7 +3960,7 @@ function tripFundDue(t) {
 }
 function personalSalarySpend(t) {
   let s = 0;
-  Object.keys(S.months).forEach(function (k) { S.months[k].forEach(function (x) { if (x.tr === t.id && x.c !== 'Income' && x.c !== 'Transfer' && L.fundOf(S.profile, t, x) === 'salary') s += Number(x.a) || 0; }); });
+  Object.keys(S.months).forEach(function (k) { S.months[k].forEach(function (x) { if (x.tr === t.id && x.c !== 'Income' && x.c !== 'Transfer' && !x.reimb && L.fundOf(S.profile, t, x) === 'salary') s += Number(x.a) || 0; }); });
   return Math.round(s * 100) / 100;
 }
 function fundSelect(id, cur, label) {
@@ -4288,7 +4321,7 @@ function onAction(act, el) {
     case 'save-tx': saveTx(el.dataset.id); break;
     case 'del-tx':
       if (el.dataset.armed !== '1') { el.dataset.armed = '1'; el.textContent = 'Tap again to delete'; break; }
-      mutate(function () { const f = findTx(el.dataset.id); if (f) { f.arr.splice(f.j, 1); markMonth(f.k); } });
+      mutate(function () { const f = findTx(el.dataset.id); if (f) { potGive(f.t); f.arr.splice(f.j, 1); markMonth(f.k); } });
       closeSheet(); render(); toast('Deleted'); break;
     case 'quick-add': {
       const q = L.parseQuick(val('qa'));
@@ -4326,7 +4359,7 @@ function onAction(act, el) {
       let c = addKind === 'income' ? 'Income' : (val('n-c') || L.categorize(m, S.profile.rules));
       if (addKind !== 'income' && c === 'Income') c = 'Other';
       let nf = null; const nid2 = L.uid();
-      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: nid2, d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
+      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: nid2, d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, (c !== 'Income' && $('#n-rb') && $('#n-rb').checked ? { reimb: true } : {}), (c !== 'Income' && $('#n-fund') && $('#n-fund').value ? { fund: $('#n-fund').value } : {}), c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
         $('#n-a').value = ''; $('#n-m').value = ''; toast(nf && nf.tr ? 'Added to your trip' : 'Added to ' + c, undoAdd(nid2)); refreshRepeat();
       }
       break;
@@ -4940,11 +4973,15 @@ function saveTx(id) {
   let n = 0;
   mutate(function () {
     const t = f.t;
+    potGive(t);
     t.m = m; t.d = d; t.c = c; t.a = c === 'Income' ? -Math.abs(a) : a;
     const pin = val('f-tr'); if (pin === 'auto') delete t.pin; else t.pin = pin;
     if (c === 'Income') { const it = val('f-it'); if (it && it !== 'base') t.it = it; else delete t.it; } else delete t.it;
     const cd = val('f-card').trim(); if (cd) t.card = cd; else delete t.card;
     syncTx(t);
+    if ($('#f-rb')) { if ($('#f-rb').checked) { t.reimb = true; const rk = L.ruleKey(m); S.profile.reimbKeys = S.profile.reimbKeys || []; if (rk.length >= 3 && S.profile.reimbKeys.indexOf(rk) < 0) S.profile.reimbKeys.push(rk); markProfile(); } else { if (t.reimb) { const rk2 = L.ruleKey(m); S.profile.reimbKeys = (S.profile.reimbKeys || []).filter(function (x) { return x !== rk2; }); markProfile(); } delete t.reimb; } }
+    if ($('#f-fund')) { if ($('#f-fund').value) t.fund = $('#f-fund').value; else delete t.fund; }
+    potTake(t);
     if (newK !== oldK) { f.arr.splice(f.j, 1); (S.months[newK] = S.months[newK] || []).push(t); markMonth(oldK); }
     markMonth(newK);
     if (rule) {
