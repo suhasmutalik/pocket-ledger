@@ -639,6 +639,9 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 .toast-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: .45; transform-origin: left; animation: toastBar linear forwards; }
 @keyframes toastBar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 #toast.has-undo { background: #1d1d20; color: #fff; border-color: rgba(255,255,255,.14); box-shadow: 0 10px 30px -10px rgba(0,0,0,.55); }
+#toast.has-undo { background: rgba(28,28,32,.55); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border: 1px solid rgba(255,255,255,.18); }
+#toast.has-undo .toast-undo { background: rgba(255,255,255,.22); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+#toast:not(.has-undo) { background: rgba(28,28,32,.6); color: #fff; -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); border: 1px solid rgba(255,255,255,.16); }
 
 </style>
 </head>
@@ -652,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:34'; window.__BID__ = '2026-11-08 21:34:09';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:36'; window.__BID__ = '2026-11-08 21:36:26';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
