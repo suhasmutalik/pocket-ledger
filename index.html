@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:02'; window.__BID__ = '2026-11-09 00:02:22';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:03'; window.__BID__ = '2026-11-09 00:03:22';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2014,7 +2014,7 @@ const SKY = [
 function skyNow(d) {
   const t = skyTimes(d), h = d.getHours() + d.getMinutes() / 60;
   const pts = SKY.map(function (k) { return { h: k.m != null ? t.noon : (k.e ? t.ss : t.sr) + k.o, k: k }; });
-  pts.unshift({ h: pts[pts.length - 1].h - 24, k: SKY[SKY.length - 1].k });
+  pts.unshift({ h: pts[pts.length - 1].h - 24, k: SKY[SKY.length - 1] });
   pts.push({ h: pts[1].h + 24, k: SKY[0] });
   let i = 0;
   while (i < pts.length - 2 && h >= pts[i + 1].h) i++;
