@@ -623,6 +623,10 @@ svg.heat { width: 100%; height: auto; display: block; }
 html, body, * { touch-action: manipulation; }
 .chart, .piedial { touch-action: pan-y; }
 
+/* sky: see-through cards so comets/stars show behind */
+html.sky .card, html.sky .fold { background: color-mix(in srgb, var(--surface) 42%, transparent); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+
 </style>
 </head>
 <body>
@@ -635,7 +639,7 @@ html, body, * { touch-action: manipulation; }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:14'; window.__BID__ = '2026-11-08 21:14:24';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:18'; window.__BID__ = '2026-11-08 21:18:40';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
