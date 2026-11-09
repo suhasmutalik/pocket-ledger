@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:54'; window.__BID__ = '2026-11-08 21:54:46';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:57'; window.__BID__ = '2026-11-08 21:57:05';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -988,7 +988,8 @@ function compareStatements(ing, abn, ledger) {
    Own-account moves and card bill payments are left out. Only totals are kept, not the rows. */
 function analyzeHistory(rows, profile) {
   profile = profile || {};
-  const use = (rows || []).filter(function (r) { return r.status !== 'transfer' && r.status !== 'card' && r.c !== 'Transfer'; });
+  const ownSav = function (r) { return /oranje\s*spaar|spaarrekening/i.test(r.m || ''); };
+  const use = (rows || []).filter(function (r) { return r.status !== 'transfer' && r.status !== 'card' && r.c !== 'Transfer' && !ownSav(r); });
   if (!use.length) return null;
   let minD = use[0].d, maxD = use[0].d;
   const per = {}, mer = {}, span = {};
@@ -1011,7 +1012,7 @@ function analyzeHistory(rows, profile) {
     return Object.keys(g).map(function (k) { const e = g[k]; return { name: e.name, total: Math.round(e.total * 100) / 100, n: e.n, why: e.why, last: e.last }; }).sort(function (a, b) { return b.total - a.total; });
   };
   const incTop = grp(use.filter(function (r) { return r.a < 0; })).slice(0, 8);
-  const incOut = grp((rows || []).filter(function (r) { return r.a < 0 && (r.status === 'transfer' || r.status === 'card' || r.c === 'Transfer'); }).map(function (r) { return Object.assign({}, r, { why: r.status === 'transfer' ? (r.why || 'moved between your accounts') : r.status === 'card' ? 'card payment' : 'looks like a transfer' }); })).slice(0, 10);
+  const incOut = grp((rows || []).filter(function (r) { return r.a < 0 && (r.status === 'transfer' || r.status === 'card' || r.c === 'Transfer' || ownSav(r)); }).map(function (r) { return Object.assign({}, r, { why: ownSav(r) ? 'moved to or from your savings' : r.status === 'transfer' ? (r.why || 'moved between your accounts') : r.status === 'card' ? 'card payment' : 'looks like a transfer' }); })).slice(0, 10);
   const keys = Object.keys(per).sort();
   const dn = function (x) { const q = String(x).split('-'); return Math.round(Date.UTC(+q[0], +q[1] - 1, +q[2]) / 864e5); };
   keys.forEach(function (k, i) {
