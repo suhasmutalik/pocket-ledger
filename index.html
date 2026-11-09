@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 01:01'; window.__BID__ = '2026-11-09 01:01:54';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 12:51'; window.__BID__ = '2026-11-09 12:51:16';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2423,8 +2423,8 @@ function potGive(t) {
 const ACCTS = [['ING Betaalpas', 'ING current account'], ['ABN AMRO bank', 'ABN AMRO bank account'], ['ABN AMRO Credit Card', 'ABN credit card (7764)']];
 function tripExtraHTML(pre, t) {
   const goals = S.profile.goals || [];
-  return '<details class="fold"' + (t && (t.reimb || t.fund) ? ' open' : '') + '><summary class="small" style="cursor:pointer">Paid with</summary><div class="stack" style="margin-top:8px">' +
-    (pre === 'n' ? '<label>Account or card<select id="n-acct"><option value="">Not set</option>' + ACCTS.map(function (a) { return '<option value="' + esc(a[0]) + '">' + esc(a[1]) + '</option>'; }).join('') + '</select></label>' : '') +
+  return '<details class="fold"' + (t && (t.reimb || t.fund) ? ' open' : '') + '><summary class="small" style="cursor:pointer">More: paid back, or from savings</summary><div class="stack" style="margin-top:8px">' +
+
     '<label class="inline"><input type="checkbox" id="' + pre + '-rb"' + (t && t.reimb ? ' checked' : '') + '> Employer pays this back (Uber, eSIM, train...)</label>' +
     (goals.length ? '<label>Or take it from savings<select id="' + pre + '-fund"><option value="">No, it is normal spending</option>' + goals.map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'g:' + g.id ? ' selected' : '') + '>' + esc(g.name) + ' (savings, ' + money(g.saved) + ')</option>'; }).join('') + '</select></label><p class="small muted">The amount leaves that savings pot and does not count against your salary.</p>' : '') +
     '</div></details>';
@@ -3881,7 +3881,7 @@ function addHTML() {
     '<label><span id="n-ml">' + (addKind === 'income' ? 'Who paid you?' : 'Merchant') + '</span><input id="n-m" type="text" placeholder="' + (addKind === 'income' ? 'For example Salary' : 'Where did it go?') + '"></label>' +
     '<label class="kx"' + (addKind === 'income' ? ' style="display:none"' : '') + '>Category<select id="n-c"><option value="">Pick automatically</option>' + catOptions('', true).replace('<option>Income</option>', '') + '</select></label>' +
     '<label class="ki"' + (addKind === 'income' ? '' : ' style="display:none"') + '>Type of income<select id="n-it">' + incomeTypeOptions('base') + '</select></label>' +
-    '<div class="kx"' + (addKind === 'income' ? ' style="display:none"' : '') + '>' + tripExtraHTML('n', null) + '</div>' +
+    '<div class="kx"' + (addKind === 'income' ? ' style="display:none"' : '') + '><label>Paid from account<select id="n-acct"><option value="">Not set</option>' + ACCTS.map(function (a) { return '<option value="' + esc(a[0]) + '">' + esc(a[1]) + '</option>'; }).join('') + '</select></label>' + tripExtraHTML('n', null) + '</div>' +
     '<div class="btns"><button class="btn" data-act="add-tx" id="n-go">' + (addKind === 'income' ? 'Add income' : 'Add expense') + '</button></div></div></section>' +
     scanSectionHTML() +
     '<section><h2>Import a statement</h2><div class="card pad stack">' +
