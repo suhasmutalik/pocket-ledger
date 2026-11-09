@@ -586,7 +586,7 @@ html.sky body { background: var(--bg); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 15:57'; window.__BID__ = '2026-11-08 15:57:58';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:05'; window.__BID__ = '2026-11-08 16:05:32';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2982,7 +2982,8 @@ function billsHTML() {
     '<section><h2>One-off costs</h2><div class="card pad stack"><span class="small muted">Tap the categories that are one-off, like moving or a new couch. They still count in what you spent, but are left out of your typical month and the yearly pace.</span><div class="chips">' +
     L.catsOf(S.profile).map(function (c) { return '<button data-act="oneoff-toggle" data-cat="' + esc(c) + '" aria-pressed="' + !!(S.profile.oneoff || {})[c] + '">' + ce(c) + '</button>'; }).join('') + '</div></div></section>' +
     '<section><div class="sec-head"><h2>Your categories</h2><button class="link" data-act="new-cat">Add category</button></div><div class="card attn">' +
-    ((S.profile.cats || []).length ? S.profile.cats.map(function (c) { return '<span class="pill">' + esc(c.name) + ' &middot; ' + (c.type === 'fixed' ? 'fixed' : 'variable') + '</span>'; }).join('') : '<span class="muted small">Built-in categories only.</span>') + '</div></section>';
+    '<p class="small muted" style="margin:0 0 8px;width:100%">Tap a category to change it. Your own categories can be renamed or deleted.</p>' +
+    L.catsOf(S.profile).map(function (c) { const mine = (S.profile.cats || []).some(function (x) { return x.name === c; }); return '<button class="pill" data-act="cat-edit" data-cat="' + esc(c) + '">' + ce(c) + ' &middot; ' + (L.typeOf(S.profile, c) === 'fixed' ? 'fixed' : 'variable') + (mine ? ' \u270E' : '') + '</button>'; }).join('') + '</div></section>';
 }
 function tripsHTML() {
   const trips = (S.profile.trips || []).slice().sort(function (a, b) { return a.start < b.start ? 1 : a.start > b.start ? -1 : 0; });
@@ -3485,6 +3486,41 @@ function catSheet() {
     '<label>Kind<select id="c-t"><option value="variable">Variable: changes month to month</option><option value="fixed">Fixed: the same bill each month</option></select></label>' +
     '<div class="btns"><button class="btn" data-act="save-cat">Add</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
 }
+function isMine(name) { return (S.profile.cats || []).some(function (x) { return x.name === name; }); }
+function catEditSheet(name) {
+  const mine = isMine(name), kind = L.typeOf(S.profile, name);
+  openSheet('<h3>' + esc(name) + '</h3><div class="stack">' +
+    (mine ? '<label>Name<input id="ce-n" type="text" value="' + esc(name) + '"></label>' : '<p class="small muted">This is a built-in category, so its name stays. It helps the app sort payments automatically. You can still change its kind.</p>') +
+    '<label>Kind<select id="ce-t"><option value="variable"' + (kind === 'fixed' ? '' : ' selected') + '>Variable: changes month to month</option><option value="fixed"' + (kind === 'fixed' ? ' selected' : '') + '>Fixed: the same bill each month</option></select></label>' +
+    '<div class="btns"><button class="btn" data-act="cat-save" data-cat="' + esc(name) + '">Save</button>' + (mine ? '<button class="btn ghost" data-act="cat-del" data-cat="' + esc(name) + '">Delete\u2026</button>' : '') + '<button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+}
+function catDelSheet(name) {
+  let n = 0, nb = 0;
+  allTx().forEach(function (t) { if (t.c === name) n++; });
+  (S.profile.bills || []).forEach(function (b) { if (b.cat === name) nb++; });
+  const others = L.catsOf(S.profile).filter(function (c) { return c !== name; });
+  openSheet('<h3>Delete ' + esc(name) + '?</h3><div class="stack"><p class="small muted">' + n + (n === 1 ? ' payment' : ' payments') + (nb ? ' and ' + nb + (nb === 1 ? ' monthly bill' : ' monthly bills') : '') + ' use this category. Choose where they should go. You can undo right after.</p>' +
+    '<label>Move them to<select id="cd-to">' + others.map(function (c) { return '<option' + (c === 'Other' ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
+    '<div class="btns"><button class="btn" data-act="cat-del-go" data-cat="' + esc(name) + '">Delete category</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+}
+function catUndoFn(snap) {
+  return function () {
+    const o = JSON.parse(snap);
+    mutate(function () { S.profile = o.profile; S.months = o.months; markProfile(); Object.keys(S.months).forEach(markMonth); });
+    render(); toast('Undone');
+  };
+}
+function catMigrate(oldN, newN) {
+  allTx().forEach(function (t) { if (t.c === oldN) t.c = newN; });
+  Object.keys(S.months).forEach(function (k) { if (S.months[k].some(function (t) { return t.c === newN; })) markMonth(k); });
+  (S.profile.bills || []).forEach(function (b) { if (b.cat === oldN) b.cat = newN; });
+  const r = S.profile.rules || {};
+  Object.keys(r).forEach(function (k) { if (r[k] === oldN) r[k] = newN; });
+  const bd = S.profile.budgets || {};
+  if (bd[oldN]) { if (newN !== oldN && !bd[newN]) bd[newN] = bd[oldN]; delete bd[oldN]; }
+  const oo = S.profile.oneoff || {};
+  if (oo[oldN]) { oo[newN] = oo[oldN]; delete oo[oldN]; }
+}
 function histBudgetSheet() {
   const st = L.historyStats(S.profile.hist, S.profile);
   if (!st) return;
@@ -3793,6 +3829,31 @@ function onAction(act, el) {
       });
       render(); toast('Bill removed'); break;
     case 'new-cat': catSheet(); break;
+    case 'cat-edit': catEditSheet(el.dataset.cat); break;
+    case 'cat-del': catDelSheet(el.dataset.cat); break;
+    case 'cat-save': {
+      const old = el.dataset.cat, mine = isMine(old), type = val('ce-t');
+      const nn = mine ? val('ce-n').trim() : old;
+      if (!nn) { toast('Type a name'); break; }
+      if (nn !== old && L.allCatsOf(S.profile).indexOf(nn) !== -1) { toast('That name is already used'); break; }
+      const snap = JSON.stringify({ profile: S.profile, months: S.months });
+      mutate(function () {
+        if (mine) { const c = S.profile.cats.filter(function (x) { return x.name === old; })[0]; c.type = type; if (nn !== old) { c.name = nn; catMigrate(old, nn); } }
+        else { const b = (S.profile.budgets = S.profile.budgets || {})[old] = (S.profile.budgets[old] || {}); b.type = type; }
+        markProfile();
+      });
+      closeSheet(); render(); toast(nn !== old ? 'Renamed to ' + nn : 'Saved', nn !== old || !mine ? catUndoFn(snap) : null); break;
+    }
+    case 'cat-del-go': {
+      const old = el.dataset.cat, to = val('cd-to');
+      if (!to || !isMine(old)) break;
+      const snap = JSON.stringify({ profile: S.profile, months: S.months });
+      mutate(function () {
+        S.profile.cats = S.profile.cats.filter(function (x) { return x.name !== old; });
+        catMigrate(old, to); markProfile();
+      });
+      closeSheet(); render(); toast('Deleted ' + old, catUndoFn(snap)); break;
+    }
     case 'save-cat': {
       const name = val('c-n').trim(), type = val('c-t');
       if (!name || L.allCatsOf(S.profile).indexOf(name) !== -1) { toast('Pick a name that is not already used'); break; }
