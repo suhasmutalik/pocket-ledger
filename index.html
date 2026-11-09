@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:33'; window.__BID__ = '2026-11-09 00:33:58';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:53'; window.__BID__ = '2026-11-09 00:53:58';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1622,6 +1622,7 @@ function totals(months, key) {
     if (t.tr) { if (t.c !== 'Income' && t.c !== 'Transfer' && t.a > 0 && !t.reimb) tripSpent += t.a; return; }
     count++;
     if (t.reimb && t.c !== 'Income') return;
+    if (t.fundDone && t.c !== 'Income') return;
     if (t.src === 'perdiem') { perdiem += -t.a; return; }
     if (t.c === 'Income') { if (t.it && t.it !== 'base') extraBy[t.it] = (extraBy[t.it] || 0) + -t.a; else income += -t.a; return; }
     if (t.c === 'Transfer') return;
@@ -2407,10 +2408,10 @@ function tripOf(t) { return t && t.tr ? (S.profile.trips || []).filter(function 
 function potTake(t) {
   if (t.fundDone || !t.fund || t.fund.indexOf('g:') !== 0 || !(Number(t.a) > 0)) return;
   const tr = tripOf(t), g = goalById(t.fund.slice(2));
-  if (!tr || tr.kind !== 'personal' || !g || t.reimb) return;
+  if ((tr && tr.kind === 'business') || !g || t.reimb || t.c === 'Income' || t.c === 'Transfer') return;
   const amt = Math.round(t.a * 100) / 100;
   g.saved = Math.round((g.saved - amt) * 100) / 100;
-  (g.log = g.log || []).push({ d: t.d, a: -amt, n: 'Trip ' + tr.name + ': ' + t.m }); g.log = g.log.slice(-300);
+  (g.log = g.log || []).push({ d: t.d, a: -amt, n: (tr ? 'Trip ' + tr.name + ': ' : '') + t.m }); g.log = g.log.slice(-300);
   t.fundDone = true; t.fundAmt = amt; markProfile();
 }
 function potGive(t) {
@@ -2421,9 +2422,11 @@ function potGive(t) {
 }
 function tripExtraHTML(pre, t) {
   const goals = S.profile.goals || [];
-  return '<details class="fold"' + (t && (t.reimb || t.fund) ? ' open' : '') + '><summary class="small" style="cursor:pointer">Trip options</summary><div class="stack" style="margin-top:8px">' +
+  const accts = cardNames().slice(); if (t && t.card && accts.indexOf(t.card) < 0) accts.unshift(t.card);
+  return '<details class="fold"' + (t && (t.reimb || t.fund || t.card) ? ' open' : '') + '><summary class="small" style="cursor:pointer">Paid with</summary><div class="stack" style="margin-top:8px">' +
+    (pre === 'n' ? '<label>Account or card<select id="n-acct"><option value="">Not set</option>' + accts.map(function (a) { return '<option value="' + esc(a) + '">' + esc(a) + '</option>'; }).join('') + '</select></label>' : '') +
     '<label class="inline"><input type="checkbox" id="' + pre + '-rb"' + (t && t.reimb ? ' checked' : '') + '> Employer pays this back (Uber, eSIM, train...)</label>' +
-    (goals.length ? '<label>Paid from<select id="' + pre + '-fund"><option value="">Normal (salary or bank)</option>' + goals.map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'g:' + g.id ? ' selected' : '') + '>' + esc(g.name) + ' (savings, ' + money(g.saved) + ')</option>'; }).join('') + '</select></label><p class="small muted">Savings is only taken for personal trips.</p>' : '') +
+    (goals.length ? '<label>Or take it from savings<select id="' + pre + '-fund"><option value="">No, it is normal spending</option>' + goals.map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'g:' + g.id ? ' selected' : '') + '>' + esc(g.name) + ' (savings, ' + money(g.saved) + ')</option>'; }).join('') + '</select></label><p class="small muted">The amount leaves that savings pot and does not count against your salary.</p>' : '') +
     '</div></details>';
 }
 function addTx(t) {
@@ -4015,7 +4018,7 @@ function txSheet(id) {
     (t.c === 'Income' ? '<label>Income type<select id="f-it">' + incomeTypeOptions(t.it || 'base') + '</select></label>' : '') +
     '<label>Trip<select id="f-tr"><option value="auto"' + (!t.pin ? ' selected' : '') + '>Automatic, by trip dates</option><option value="none"' + (t.pin === 'none' ? ' selected' : '') + '>Everyday spending, not a trip</option>' + (S.profile.trips || []).map(function (x) { return '<option value="' + esc(x.id) + '"' + (t.pin === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('') + '</select></label>' +
     '<label>Card<input id="f-card" type="text" value="' + esc(t.card || '') + '" placeholder="Leave empty if not paid by card"></label>' +
-    (t.tr ? tripExtraHTML('f', t) : '') +
+    tripExtraHTML('f', t) +
     '<label class="inline"><input type="checkbox" id="f-rule"> Always file this merchant under this category</label>' +
     '<p class="small muted" id="f-hint">Use a negative amount for a refund.</p>' +
     '<div class="btns"><button class="btn" data-act="save-tx" data-id="' + esc(id) + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button><button class="btn danger" data-act="del-tx" data-id="' + esc(id) + '">Delete</button></div></div>');
@@ -4436,7 +4439,7 @@ function onAction(act, el) {
       let c = addKind === 'income' ? 'Income' : (val('n-c') || L.categorize(m, S.profile.rules));
       if (addKind !== 'income' && c === 'Income') c = 'Other';
       let nf = null; const nid2 = L.uid();
-      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: nid2, d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, (c !== 'Income' && $('#n-rb') && $('#n-rb').checked ? { reimb: true } : {}), (c !== 'Income' && $('#n-fund') && $('#n-fund').value ? { fund: $('#n-fund').value } : {}), c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
+      if (mutate(function () { nf = tripFields(c === 'Income' ? -Math.abs(a) : a, val('n-cur') || S.profile.currency, d, c !== 'Income' && c !== 'Transfer'); addTx(Object.assign({ id: nid2, d: d, m: L.cleanMerchant(m), c: c, src: 'manual' }, (c !== 'Income' && $('#n-rb') && $('#n-rb').checked ? { reimb: true } : {}), (c !== 'Income' && $('#n-fund') && $('#n-fund').value ? { fund: $('#n-fund').value } : {}), (c !== 'Income' && $('#n-acct') && $('#n-acct').value ? { card: $('#n-acct').value } : {}), c === 'Income' && val('n-it') && val('n-it') !== 'base' ? { it: val('n-it') } : {}, nf)); })) {
         $('#n-a').value = ''; $('#n-m').value = ''; toast(nf && nf.tr ? 'Added to your trip' : 'Added to ' + c, undoAdd(nid2)); refreshRepeat();
       }
       break;
