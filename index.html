@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:18'; window.__BID__ = '2026-11-08 23:18:34';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:25'; window.__BID__ = '2026-11-08 23:25:11';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -985,7 +985,7 @@ function compareStatements(ing, abn, ledger) {
   rows.forEach(function (r) {
     if (r.status !== 'new') return;
     if (r.bank === 'ING' && /abn\s*amro/i.test(r.m) && !/card/i.test(r.m)) { r.status = 'transfer'; r.why = 'sent to your ABN account'; return; }
-    if (r.cents > 0 && /card services|creditcard|credit card|icscards|abn amro card/i.test(r.m)) { r.status = 'card'; r.why = 'card bill, already counted'; }
+    if (r.cents > 0 && /card services|creditcard|credit card|icscards|abn amro card|international card/i.test(r.m)) { r.status = 'card'; r.why = 'card bill, already counted'; }
   });
   /* 3. already in the ledger: same amount within 5 days, each entry used once */
   const pool = (ledger || []).map(function (t) { return { d: t.d, c: Math.round(Number(t.a) * 100), used: false }; });
@@ -1661,11 +1661,17 @@ function autoLimit(profile, months, cat, key) {
 }
 
 /* Personal trips paid from your salary: this money leaves your pocket, so it counts as spending in the salary month. */
+/* Where the money for one trip purchase comes from: 'salary' or 'g:<savings pot id>'. The card used decides; trips have a fallback. */
+function fundOf(profile, trip, t) {
+  const m = (profile && profile.cardFund) || {};
+  if (t && t.card && m[t.card]) return m[t.card];
+  return trip && trip.fund === 'savings' && trip.fundGoal ? 'g:' + trip.fundGoal : 'salary';
+}
 function personalTripSpend(profile, months, key) {
   const trips = {};
-  ((profile && profile.trips) || []).forEach(function (x) { if (x.kind === 'personal' && (x.fund || 'salary') === 'salary') trips[x.id] = true; });
+  ((profile && profile.trips) || []).forEach(function (x) { if (x.kind === 'personal') trips[x.id] = x; });
   let sum = 0;
-  txIn(months, key).forEach(function (t) { if (t.tr && trips[t.tr] && t.c !== 'Income' && t.c !== 'Transfer') sum += Number(t.a) || 0; });
+  txIn(months, key).forEach(function (t) { if (t.tr && trips[t.tr] && t.c !== 'Income' && t.c !== 'Transfer' && fundOf(profile, trips[t.tr], t) === 'salary') sum += Number(t.a) || 0; });
   return Math.round(sum * 100) / 100;
 }
 function monthSummary(profile, months, key) {
@@ -1837,7 +1843,7 @@ const api = {
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
   parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, analyzeHistory: analyzeHistory, historyStats: historyStats, normalizeSpoken: normalizeSpoken, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
   parseTapHash: parseTapHash, creditInfo: creditInfo, cardCheck: cardCheck, priceRises: priceRises, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
-  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary, personalTripSpend: personalTripSpend
+  daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary, personalTripSpend: personalTripSpend, fundOf: fundOf
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else root.LedgerLogic = api;
@@ -2295,7 +2301,15 @@ function tripWanted(t) {
   if (t.pin) return trips.filter(function (x) { return x.id === t.pin; })[0] ? t.pin : null;
   if (t.c === 'Income' || t.c === 'Transfer' || t.src === 'bill' || t.src === 'perdiem' || !(t.a > 0)) return null;
   const x = trips.filter(function (y) { return y.start <= t.d && (!y.end || t.d <= y.end); })[0];
-  return x ? x.id : null;
+  if (!x) return null;
+  /* Only what was really bought on the trip joins it. Rent, family transfers, train and bank rows that fall in the same dates do not. */
+  if (L.typeOf(S.profile, t.c) === 'fixed' && t.oc !== x.cur) return null;
+  if (t.src === 'import' || t.src === 'statement') {
+    const abroad = t.oc === x.cur || (x.cur === 'USD' && /\b(usa|us)\s*$/i.test(String(t.m || '').trim()));
+    if (!abroad) return null;
+  }
+  if (/^\s*(ics|international card services)\s*$/i.test(String(t.m || ''))) return null;
+  return x.id;
 }
 function syncTx(t) {
   const w = tripWanted(t);
@@ -3435,12 +3449,14 @@ function tripsHTML() {
       '<div class="sums" style="margin:0 -14px"><div><span class="k">Spent</span><span class="v">' + moneyIn(T.spent, t.cur) + '</span></div><div><span class="k">' + (personal ? 'Budget' : 'Per diem') + '</span><span class="v">' + (hasPlan ? moneyIn(T.received, t.cur) : '\u2013') + '</span></div><div><span class="k">' + (over ? 'Over by' : 'Left') + '</span><span class="v" style="color:var(--' + (hasPlan ? (over ? 'bad' : 'good') : 'muted') + ')">' + (hasPlan ? moneyIn(Math.abs(T.left), t.cur) : '\u2013') + '</span></div></div>' +
       (hasPlan ? bar(pct(T.spent, T.received), over ? 'bad' : 'good') + '<div class="small muted mono">' + moneyIn(T.perDay, t.cur) + ' a day spent' + (personal ? '' : ' of ' + moneyIn(t.perDiem, t.pdCur || t.cur) + ' per diem') + ' &middot; about ' + money(T.spentHome) + '</div>' : '<div class="note">Set ' + (personal ? 'a budget' : 'your per diem per day') + ' (Edit) to see what is left. About ' + money(T.spentHome) + ' spent so far.</div>') +
       (personal ? (function () {
-        if (t.fund === 'savings') {
-          const g = (S.profile.goals || []).filter(function (x) { return x.id === t.fundGoal; })[0];
-          const due = Math.round((T.spentHome - (t.fundTaken || 0)) * 100) / 100;
-          return '<div class="kv"><span>Paid from savings' + (g ? ': ' + esc(g.name) : '') + '<span class="small muted" style="display:block">Taken so far ' + money(t.fundTaken || 0) + ' of ' + money(T.spentHome) + '</span>' + (g && due > g.saved ? '<span class="small neg" style="display:block">More than this pot holds (' + money(g.saved) + ')</span>' : '') + '</span>' + (g && due > 0.005 ? '<button class="btn sm" data-act="trip-settle" data-id="' + esc(t.id) + '">Take ' + money(due) + '</button>' : (g ? '<span class="pill good">Settled</span>' : '<span class="small neg">Pot missing</span>')) + '</div>';
-        }
-        return '<div class="small muted">Paid from your salary. It counts in Left from salary.</div>';
+        const F = tripFundDue(t);
+        const pots = Object.keys(F);
+        if (!pots.length) return '<div class="small muted">Paid from your salary. It counts in Left from salary' + (T.spentHome > 0 ? ' (' + money(personalSalarySpend(t)) + ' so far).' : '.') + '</div>';
+        return '<div class="small muted">Salary part: ' + money(personalSalarySpend(t)) + ' (counts in Left from salary)</div>' + pots.map(function (gid) {
+          const g = (S.profile.goals || []).filter(function (x) { return x.id === gid; })[0], f = F[gid];
+          const due = Math.round((f.total - f.taken) * 100) / 100;
+          return '<div class="kv"><span>From savings' + (g ? ': ' + esc(g.name) : '') + '<span class="small muted" style="display:block">Taken ' + money(f.taken) + ' of ' + money(f.total) + '</span>' + (g && due > g.saved ? '<span class="small neg" style="display:block">More than this pot holds (' + money(g.saved) + ')</span>' : '') + '</span>' + (g && due > 0.005 ? '<button class="btn sm" data-act="trip-settle" data-id="' + esc(t.id) + '" data-g="' + esc(gid) + '">Take ' + money(due) + '</button>' : (g ? '<span class="pill good">Settled</span>' : '<span class="small neg">Pot missing</span>')) + '</div>';
+        }).join('');
       })() : '') +
       (!personal && t.perDiem > 0 ? (function () {
         const m = tripMoney(t);
@@ -3894,6 +3910,38 @@ function txSheet(id) {
     '<p class="small muted" id="f-hint">Use a negative amount for a refund.</p>' +
     '<div class="btns"><button class="btn" data-act="save-tx" data-id="' + esc(id) + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button><button class="btn danger" data-act="del-tx" data-id="' + esc(id) + '">Delete</button></div></div>');
 }
+function tripFundDue(t) {
+  const out = {};
+  const taken = Object.assign({}, t.taken || {});
+  if (!t.taken && t.fundTaken && t.fundGoal) taken[t.fundGoal] = t.fundTaken;
+  Object.keys(S.months).forEach(function (k) {
+    S.months[k].forEach(function (x) {
+      if (x.tr !== t.id || x.c === 'Income' || x.c === 'Transfer') return;
+      const f = L.fundOf(S.profile, t, x);
+      if (f.indexOf('g:') !== 0) return;
+      const gid = f.slice(2), e = out[gid] = out[gid] || { total: 0, taken: Math.round((taken[gid] || 0) * 100) / 100 };
+      e.total = Math.round((e.total + (Number(x.a) || 0)) * 100) / 100;
+    });
+  });
+  return out;
+}
+function personalSalarySpend(t) {
+  let s = 0;
+  Object.keys(S.months).forEach(function (k) { S.months[k].forEach(function (x) { if (x.tr === t.id && x.c !== 'Income' && x.c !== 'Transfer' && L.fundOf(S.profile, t, x) === 'salary') s += Number(x.a) || 0; }); });
+  return Math.round(s * 100) / 100;
+}
+function fundSelect(id, cur, label) {
+  return '<label>' + esc(label) + '<select id="' + id + '"><option value="salary"' + (!cur || cur === 'salary' ? ' selected' : '') + '>My salary</option>' + (S.profile.goals || []).map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (cur === 'g:' + g.id ? ' selected' : '') + '>Savings: ' + esc(g.name) + '</option>'; }).join('') + '</select></label>';
+}
+function cardNames() {
+  const c = {}; allTx().forEach(function (x) { if (x.card) c[x.card] = (c[x.card] || 0) + 1; });
+  return Object.keys(c).sort(function (a, b) { return c[b] - c[a]; }).slice(0, 8);
+}
+function fundRows(t) {
+  const cf = S.profile.cardFund || {};
+  const def = t && t.fund === 'savings' && t.fundGoal ? 'g:' + t.fundGoal : 'salary';
+  return cardNames().map(function (n, i) { return fundSelect('t-cf' + i, cf[n] || def, n); }).join('') + fundSelect('t-f', def, 'Anything else (cash, other cards)');
+}
 function tripSheet(id) {
   const t = (S.profile.trips || []).filter(function (x) { return x.id === id; })[0];
   const fxc = S.profile.fx && S.profile.fx.cur;
@@ -3912,7 +3960,7 @@ function tripSheet(id) {
     '<div class="grid2"><label>Paid only if trip lasts (days)<input id="t-ala" type="number" inputmode="numeric" min="0" value="' + (t && t.alAfter != null ? t.alAfter : 28) + '"></label>' +
     '<label>Tax kept back %<input id="t-alt" type="number" inputmode="decimal" min="0" max="100" value="' + (t && t.alTax ? t.alTax : '') + '" placeholder="0"></label></div></div>' +
     '<div id="t-per"' + (personal ? '' : ' hidden') + '><label>Trip budget (optional, trip currency)<input id="t-b" type="number" inputmode="decimal" step="1" min="0" value="' + (t && t.budget ? t.budget : '') + '"></label></div>' +
-    '<div id="t-fund"' + (personal ? '' : ' hidden') + '><label>How do you pay for this trip?<select id="t-f"><option value="salary"' + (!t || (t.fund || 'salary') === 'salary' ? ' selected' : '') + '>From my salary (counts in Left from salary)</option>' + (S.profile.goals || []).map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'savings' && t.fundGoal === g.id ? ' selected' : '') + '>From savings: ' + esc(g.name) + '</option>'; }).join('') + '</select></label><p class="small muted">Paying by credit card? Choose what will pay the card bill later. The card purchases are still tracked on the card.</p></div>' +
+    '<div id="t-fund"' + (personal ? '' : ' hidden') + '><b>How do you pay for this trip?</b><p class="small muted" style="margin:2px 0 8px">Choose what each card or account is paid from. When you tap or log a purchase, the money is taken from there.</p>' + fundRows(t) + '</div>' +
     '<p class="small muted">Everything you spend between the first and last day goes into this trip automatically. Leave the last day empty while you are still away.</p>' +
     '<div class="btns"><button class="btn" data-act="save-trip" data-id="' + esc(id || '') + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (t ? '<button class="btn danger" data-act="del-trip" data-id="' + esc(id) + '">Delete</button>' : '') + '</div></div>');
 }
@@ -4302,6 +4350,7 @@ function onAction(act, el) {
         if (!t) { t = { id: L.uid(), cur: cur }; trips.push(t); }
         t.cur = cur; t.kind = kind; t.pdCur = val('t-pc') === 'home' ? S.profile.currency : cur;
         t.alAmt = kind === 'personal' ? 0 : (numval('t-al') || 0); t.alCur = val('t-alc') === 'trip' ? cur : S.profile.currency; t.alAfter = numval('t-ala'); if (isNaN(t.alAfter)) t.alAfter = 28; t.alTax = numval('t-alt') || 0;
+        if (kind === 'personal') { const cf = S.profile.cardFund = S.profile.cardFund || {}; cardNames().forEach(function (n, i) { const v = val('t-cf' + i); if (v) cf[n] = v; }); }
         const fv = kind === 'personal' ? val('t-f') : 'salary';
         if (fv.indexOf('g:') === 0) { t.fund = 'savings'; t.fundGoal = fv.slice(2); } else { t.fund = 'salary'; t.fundGoal = ''; }
         t.name = name; t.start = s0; t.end = e0 || null; t.perDiem = kind === 'personal' ? 0 : pd; t.budget = kind === 'personal' ? (numval('t-b') || 0) : 0; t.rate = rate;
@@ -4358,15 +4407,17 @@ function onAction(act, el) {
     case 'pie-step': pieStep(Number(el.dataset.d)); break;
     case 'trip-settle': {
       const t = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-      const g = t && (S.profile.goals || []).filter(function (x) { return x.id === t.fundGoal; })[0];
+      const gid = el.dataset.g || (t && t.fundGoal);
+      const g = t && (S.profile.goals || []).filter(function (x) { return x.id === gid; })[0];
       if (!t || !g) { toast('Choose a savings pot for this trip first'); break; }
-      const T = L.tripSummary(S.months, t, L.today());
-      const due = Math.round((T.spentHome - (t.fundTaken || 0)) * 100) / 100;
+      const F = tripFundDue(t)[gid];
+      const due = F ? Math.round((F.total - F.taken) * 100) / 100 : 0;
       if (!(due > 0.005)) break;
       mutate(function () {
         g.saved = Math.round((g.saved - due) * 100) / 100;
         (g.log = g.log || []).push({ d: L.today(), a: -due, n: 'Trip: ' + t.name }); g.log = g.log.slice(-300);
-        t.fundTaken = Math.round(((t.fundTaken || 0) + due) * 100) / 100; markProfile();
+        t.taken = Object.assign({}, t.taken || (t.fundTaken && t.fundGoal ? (function () { const o = {}; o[t.fundGoal] = t.fundTaken; return o; })() : {}));
+        t.taken[gid] = Math.round(((t.taken[gid] || 0) + due) * 100) / 100; markProfile();
       });
       render(); toast('Took ' + money(due) + ' from ' + g.name);
       break;
@@ -5222,11 +5273,11 @@ function fixSavingsMoves() {
   const bad = [];
   Object.keys(S.months).forEach(function (k) {
     const m = S.months[k], arr = Array.isArray(m) ? m : (m && (m.tx || m.txs)); if (!arr) return;
-    arr.forEach(function (t) { if (t.src === 'import' && t.c !== 'Transfer' && !t.tr && /oranje\s*spaar|spaarrekening/i.test(t.m || '')) bad.push([k, t]); });
+    arr.forEach(function (t) { if (t.src === 'import' && t.c !== 'Transfer' && (/oranje\s*spaar|spaarrekening/i.test(t.m || '') || /^\s*ics\s*$|international card services/i.test(t.m || ''))) bad.push([k, t]); });
   });
   if (!bad.length) return;
   mutate(function () { bad.forEach(function (b) { b[1].c = 'Transfer'; markMonth(b[0]); }); });
-  setTimeout(function () { toast('Marked ' + bad.length + ' moves to your savings as transfers, not income'); render(); }, 600);
+  setTimeout(function () { toast('Marked ' + bad.length + ' moves between your own accounts and card payments as transfers'); render(); }, 600);
 }
 async function boot() {
   const name = location.hash.replace(/^#/, '');
