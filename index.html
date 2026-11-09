@@ -631,6 +631,15 @@ html.sky .chips3 > div { background: color-mix(in srgb, var(--surface-2) 35%, tr
 html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in srgb, var(--hl) 22%, transparent), transparent 62%), linear-gradient(160deg, color-mix(in srgb, var(--hl) 8%, transparent), color-mix(in srgb, var(--surface) 12%, transparent) 70%); }
 
+/* undo toast: roomy, big Undo button, countdown line */
+#toast.has-undo { display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 20px; border-radius: 20px; position: fixed; overflow: hidden; min-width: min(320px, calc(100% - 32px)); justify-content: space-between; text-align: left; }
+#toast.has-undo .toast-msg { flex: 1; min-width: 0; font-size: 15px; }
+#toast.has-undo .toast-undo { margin: 0; min-height: 44px; min-width: 84px; padding: 0 20px; font-size: 16px; font-weight: 700; border-radius: 14px; border: 0; background: #fff; color: #111; }
+#toast.has-undo .toast-undo:active { transform: scale(.96); }
+.toast-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: currentColor; opacity: .45; transform-origin: left; animation: toastBar linear forwards; }
+@keyframes toastBar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+#toast.has-undo { background: #1d1d20; color: #fff; border-color: rgba(255,255,255,.14); box-shadow: 0 10px 30px -10px rgba(0,0,0,.55); }
+
 </style>
 </head>
 <body>
@@ -643,7 +652,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:24'; window.__BID__ = '2026-11-08 21:24:13';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:34'; window.__BID__ = '2026-11-08 21:34:09';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2045,10 +2054,16 @@ function niceCeil(x) {
 }
 let TOAST_UNDO = null;
 function toast(msg, undo) {
-  const el = $('#toast'); el.textContent = msg; el.classList.add('on');
+  const el = $('#toast'); el.textContent = ''; el.classList.add('on'); el.classList.toggle('has-undo', !!undo);
   TOAST_UNDO = undo || null;
-  if (undo) { const b = document.createElement('button'); b.className = 'toast-undo'; b.textContent = 'Undo'; b.setAttribute('data-act', 'toast-undo'); el.appendChild(b); el.style.pointerEvents = 'auto'; } else el.style.pointerEvents = 'none';
-  clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove('on'); TOAST_UNDO = null; el.style.pointerEvents = 'none'; }, undo ? 6000 : 2800);
+  const ms = undo ? 9000 : 2800;
+  const t = document.createElement('span'); t.className = 'toast-msg'; t.textContent = msg; el.appendChild(t);
+  if (undo) {
+    const b = document.createElement('button'); b.className = 'toast-undo'; b.textContent = 'Undo'; b.setAttribute('data-act', 'toast-undo'); el.appendChild(b);
+    const bar = document.createElement('i'); bar.className = 'toast-bar'; bar.style.animationDuration = ms + 'ms'; el.appendChild(bar);
+    el.style.pointerEvents = 'auto';
+  } else el.style.pointerEvents = 'none';
+  clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove('on'); TOAST_UNDO = null; el.style.pointerEvents = 'none'; }, ms);
 }
 function undoAdd(id) {
   return function () { mutate(function () { const f = findTx(id); if (f) { f.arr.splice(f.j, 1); markMonth(f.k); } }); render(); toast('Removed'); refreshRepeat(); };
