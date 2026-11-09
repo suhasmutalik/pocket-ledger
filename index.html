@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:36'; window.__BID__ = '2026-11-08 21:36:26';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:54'; window.__BID__ = '2026-11-08 21:54:46';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2055,7 +2055,7 @@ function niceCeil(x) {
   for (let i = 0; i < steps.length; i++) if (steps[i] * e >= x) return steps[i] * e;
   return 10 * e;
 }
-let TOAST_UNDO = null;
+let TOAST_UNDO = null; let IMPUNDO = null;
 function toast(msg, undo) {
   const el = $('#toast'); el.textContent = ''; el.classList.add('on'); el.classList.toggle('has-undo', !!undo);
   TOAST_UNDO = undo || null;
@@ -2067,6 +2067,29 @@ function toast(msg, undo) {
     el.style.pointerEvents = 'auto';
   } else el.style.pointerEvents = 'none';
   clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove('on'); TOAST_UNDO = null; el.style.pointerEvents = 'none'; }, ms);
+}
+function undoImport(ids) {
+  return function () { removeIds(ids); toast('Import removed'); refreshRepeat(); };
+}
+function removeIds(ids) {
+  const set = {}; ids.forEach(function (i) { set[i] = 1; });
+  mutate(function () {
+    Object.keys(S.months).forEach(function (k) {
+      const m = S.months[k], arr = m && (m.tx || m.txs || (Array.isArray(m) ? m : null));
+      if (!arr) return;
+      for (let j = arr.length - 1; j >= 0; j--) { if (set[arr[j].id]) { arr.splice(j, 1); markMonth(k); } }
+    });
+    if (S.profile.lastImport) { delete S.profile.lastImport; markProfile(); }
+  });
+  render();
+}
+function recentImportIds(mins) {
+  const M = 1679616, now = Date.now() % M, out = [];
+  Object.keys(S.months).forEach(function (k) {
+    const m = S.months[k], arr = m && (m.tx || m.txs || (Array.isArray(m) ? m : null)); if (!arr) return;
+    arr.forEach(function (t) { if (t.src !== 'import' || !t.id) return; const v = parseInt(String(t.id).slice(-4), 36); if (isNaN(v)) return; if (((now - v) % M + M) % M < mins * 60000) out.push(t.id); });
+  });
+  return out;
 }
 function undoAdd(id) {
   return function () { mutate(function () { const f = findTx(id); if (f) { f.arr.splice(f.j, 1); markMonth(f.k); } }); render(); toast('Removed'); refreshRepeat(); };
@@ -3562,6 +3585,7 @@ function addHTML() {
     '<label>CSV file<input id="impfile" type="file"></label>' +
     '<label>Or paste the rows<textarea id="imptext" placeholder="Date,Description,Amount"></textarea></label>' +
     '<div class="btns"><button class="btn" data-act="imp-parse">Review import</button></div><div id="impBox"></div></div></section>' +
+    '<section><h2>Imported by mistake?</h2><div class="card pad stack"><p class="small muted">This removes only the entries from your most recent import. Your other entries stay as they are.</p><div class="btns"><button class="btn ghost" data-act="imp-undo">Undo last import</button></div></div></section>' +
     '<section><h2>Compare ING and ABN</h2><div class="card pad stack">' +
     '<p class="small muted">Choose both bank files. Nothing is changed until you tap Import. The app shows what is missing from your ledger, and hides money you moved between your own accounts.</p>' +
     '<label>ING file<input id="cmping" type="file"></label>' +
@@ -4591,24 +4615,33 @@ function onAction(act, el) {
       break;
     }
     case 'imp-cancel': IMP = null; ['#impBox', '#scanBox', '#cmpBox'].forEach(function (s) { const b = $(s); if (b) b.innerHTML = ''; }); break;
+    case 'imp-undo': {
+      const li = S.profile.lastImport; const ids = li && li.ids && li.ids.length ? li.ids : recentImportIds(27);
+      if (!ids.length) { toast('No recent import found'); break; }
+      openSheet('<h3>Remove ' + ids.length + ' imported entries?</h3><p class="small muted">Only the entries from your last import are removed.</p><div class="btns"><button class="btn" data-act="imp-undo-go">Remove them</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div>');
+      IMPUNDO = ids; break;
+    }
+    case 'imp-undo-go': { const ids = IMPUNDO || []; IMPUNDO = null; closeSheet(); if (ids.length) { removeIds(ids); toast('Removed ' + ids.length + ' entries'); } break; }
     case 'imp-go': {
       const rows = IMP.res.rows.filter(function (r) { return r.inc; });
       if (!rows.length) break;
-      let latest = '', blocked = false;
+      let latest = '', blocked = false; const impIds = [];
       mutate(function () {
         rows.forEach(function (r) {
           const f = tripFields(r.oa != null ? r.oa : r.a, r.cur || IMP.cur || S.profile.currency, r.d, r.a > 0 && r.c !== 'Transfer');
           if (f.needRate) blocked = true;
-          addTx(Object.assign({ id: L.uid(), d: r.d, m: r.m, c: r.c, src: IMP.scan ? 'scan' : 'import' }, f));
+          const nid = L.uid(); impIds.push(nid);
+          addTx(Object.assign({ id: nid, d: r.d, m: r.m, c: r.c, src: IMP.scan ? 'scan' : 'import' }, f));
           if (r.d > latest) latest = r.d;
         });
+        S.profile.lastImport = { at: Date.now(), ids: impIds }; markProfile();
       });
       if (blocked) toast('Set the exchange rate in Budget first');
       IMP = null;
       viewKey = L.periodKeyOf(latest) > NOW_KEY ? NOW_KEY : L.periodKeyOf(latest);
       filt = { q: '', cat: '', all: false };
       setTab('activity');
-      toast('Imported ' + rows.length + (rows.length === 1 ? ' entry' : ' entries'));
+      toast('Imported ' + rows.length + (rows.length === 1 ? ' entry' : ' entries'), undoImport(impIds));
       break;
     }
     case 'copy': {
