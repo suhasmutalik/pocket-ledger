@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:04'; window.__BID__ = '2026-11-08 23:04:06';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:09'; window.__BID__ = '2026-11-08 23:09:50';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2709,7 +2709,7 @@ function compareHTML() {
     }).join('') + '</div><p class="small muted" style="margin:0"><span class="dot" style="background:var(--g1)"></span> This month &nbsp; <span class="dot" style="background:rgba(140,150,165,.55)"></span> Last month, same day</p></div></section>';
 }
 /* ---------- heat map: category by day ---------- */
-let HEAT = {};
+let HEAT = {}; let heatTrips = true;
 const HEAT_STOPS = [[255, 236, 150], [255, 183, 3], [247, 107, 28], [214, 40, 57]];
 function heatColor(t) {
   const x = Math.max(0, Math.min(1, t)) * (HEAT_STOPS.length - 1), i = Math.min(HEAT_STOPS.length - 2, Math.floor(x)), f = x - i, A = HEAT_STOPS[i], B = HEAT_STOPS[i + 1];
@@ -2721,7 +2721,7 @@ function heatHTML() {
   const days = []; for (let i = 0; i < n; i++) days.push(L.addDays(r.start, i));
   const cell = {}, tot = {};
   L.txIn(S.months, viewKey).forEach(function (t) {
-    if (t.tr || t.src === 'perdiem' || t.src === 'bill' || t.c === 'Income' || t.c === 'Transfer' || !(t.a > 0)) return;
+    if ((t.tr && !heatTrips) || t.src === 'perdiem' || t.src === 'bill' || t.c === 'Income' || t.c === 'Transfer' || !(t.a > 0)) return;
     if (L.typeOf(S.profile, t.c) === 'fixed') return;
     const k = t.c + '|' + t.d; cell[k] = (cell[k] || 0) + t.a; tot[t.c] = (tot[t.c] || 0) + t.a;
   });
@@ -2744,9 +2744,9 @@ function heatHTML() {
       g += '<rect class="hm-c" data-act="heat-cell" data-cat="' + esc(c) + '" data-d="' + d + '" x="' + (x + .6).toFixed(1) + '" y="' + (y + 1) + '" width="' + Math.max(2, cw - 1.2).toFixed(1) + '" height="' + (rh - 3) + '" rx="2.5" style="fill:' + (v ? heatColor(Math.sqrt(v / mx)) : 'rgba(128,140,152,.14)') + '"/>';
     });
   });
-  return '<section><h2>Spending by day</h2><div class="card pad stack"><svg class="heat" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Heat map of everyday spending by category and day">' + g + '</svg>' +
+  return '<section><h2>Spending by day</h2><div class="card pad stack"><div class="chips">' + [[true, 'Everything'], [false, 'Without trips']].map(function (o) { return '<button data-act="heat-mode" data-v="' + o[0] + '" aria-pressed="' + (heatTrips === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div><svg class="heat" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Heat map of everyday spending by category and day">' + g + '</svg>' +
     '<div class="hm-leg"><span class="small muted">Nothing</span><i style="background:rgba(128,140,152,.14)"></i><span class="small muted">Less</span>' + [0.1, 0.35, 0.6, 0.85, 1].map(function (t) { return '<i style="background:' + heatColor(t) + '"></i>'; }).join('') + '<span class="small muted">More</span></div>' +
-    '<p class="small muted" id="heatcap" style="margin:0">Yellow is a little, red is a lot. Tap a square for details. Shaded columns are weekends. Fixed bills and trips are left out.</p></div></section>';
+    '<p class="small muted" id="heatcap" style="margin:0">Yellow is a little, red is a lot. Tap a square for details. Shaded columns are weekends. Fixed bills are left out' + (heatTrips ? '. Trip spending is included, whether it is a work trip or a personal one.' : ' and so is trip spending.') + '</p></div></section>';
 }
 /* ---------- money flow (income to groups to categories) ---------- */
 const FLOWSMALL = { f: [], v: [] };
@@ -4321,6 +4321,7 @@ function onAction(act, el) {
     }
     case 'cmp-open': cmpSheet(el.dataset.cat); break;
     case 'pie-step': pieStep(Number(el.dataset.d)); break;
+    case 'heat-mode': heatTrips = el.dataset.v === 'true'; render(); break;
     case 'heat-cell': {
       const k = el.dataset.cat + '|' + el.dataset.d, v = HEAT.cell && HEAT.cell[k], cap = $('#heatcap');
       if (cap) cap.textContent = el.dataset.cat + ' \u00b7 ' + L.dateLabel(el.dataset.d) + ' \u00b7 ' + (v ? money(v, true) : 'nothing spent');
