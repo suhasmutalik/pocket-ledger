@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:39'; window.__BID__ = '2026-11-08 22:39:55';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:04'; window.__BID__ = '2026-11-08 23:04:06';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1230,6 +1230,46 @@ function isCredit(profile, card) {
 function dateYMD(y, m, d) { return ymd(new Date(y, m - 1, d)); }
 function lastOfMonth(y, m) { return dateYMD(y, m, new Date(y, m, 0).getDate()); }
 /* statement generated on billDay; it covers the day after the previous billDay up to billDay; due at the end of that month */
+/* Subscriptions and bills that cost more than they used to. Uses what you logged, so card and bank both count. */
+function priceRises(profile, months, todayStr) {
+  const today = todayStr || (typeof today === 'function' ? today() : '');
+  const seen = (profile && profile.riseSeen) || {};
+  const g = {};
+  Object.keys(months || {}).forEach(function (k) {
+    (months[k] || []).forEach(function (t) {
+      if (!(Number(t.a) > 0) || t.tr || t.c === 'Transfer' || t.c === 'Income' || !t.m) return;
+      const key = norm(t.m).replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).join(' ');
+      if (key.length < 3) return;
+      (g[key] = g[key] || { name: t.m, list: [], cat: t.c }).list.push({ d: t.d, m: t.m, a: Math.round((t.oa != null && t.oc ? t.oa : t.a) * 100) / 100, cur: t.oc || '' });
+    });
+  });
+  const out = [];
+  Object.keys(g).forEach(function (key) {
+    const l = g[key].list.sort(function (x, y) { return x.d < y.d ? -1 : x.d > y.d ? 1 : 0; });
+    /* one charge per calendar month (the last one), same currency */
+    const byM = {};
+    l.forEach(function (x) { byM[x.d.slice(0, 7)] = x; });
+    const ms = Object.keys(byM).sort().map(function (k) { return byM[k]; });
+    if (ms.length < 3) return;
+    /* it has to repeat: each charge about a month after the one before it */
+    const gaps = ms.slice(1).map(function (x, i) { return daysBetween(ms[i].d, x.d); });
+    const monthly = gaps.filter(function (x) { return x >= 20 && x <= 42; }).length >= Math.max(2, Math.ceil(gaps.length * 0.6));
+    if (!monthly) return;
+    for (let n = 2; n < ms.length; n++) {
+      const cur = ms[n], p1 = ms[n - 1], p0 = ms[n - 2];
+      if (cur.cur !== p1.cur || p1.cur !== p0.cur) continue;
+      const bill = ['Subscriptions', 'Utilities', 'Insurance', 'Rent', 'Bank fees'].indexOf(g[key].cat) >= 0;
+      if (!bill && Math.abs(p1.a - p0.a) > 0.011) continue; /* shops and trips change all the time: only a steady price counts */
+      const diff = cur.a - p1.a;
+      if (diff < 0.3 || diff / p1.a < 0.02) continue;
+      if (daysBetween(cur.d, today) > 365) continue;
+      const fresh = n === ms.length - 1 && daysBetween(cur.d, today) <= 75 && !seen[key + '|' + cur.a];
+      out.push({ key: key, name: String(cur.m || g[key].name).replace(/\s*(machtiging|incasso|kenmerk|omschrijving|description)\b.*$/i, '').replace(/\s+/g, ' ').trim(), from: p1.a, to: cur.a, cur: cur.cur, since: cur.d, pct: diff / p1.a, extraYear: Math.round(diff * 12 * 100) / 100, fresh: fresh });
+    }
+  });
+  return out.sort(function (x, y) { return y.extraYear - x.extraYear; });
+}
+
 /* Compare a credit card statement with the ledger. rows: parseStatement rows (a > 0 is spending). */
 function cardCheck(rows, ledger) {
   const credits = (rows || []).filter(function (r) { return r.a < 0; }).map(function (r) { return { r: r, used: false }; });
@@ -1774,7 +1814,7 @@ const api = {
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
   parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, analyzeHistory: analyzeHistory, historyStats: historyStats, normalizeSpoken: normalizeSpoken, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
-  parseTapHash: parseTapHash, creditInfo: creditInfo, cardCheck: cardCheck, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
+  parseTapHash: parseTapHash, creditInfo: creditInfo, cardCheck: cardCheck, priceRises: priceRises, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
   daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -2448,7 +2488,7 @@ function homeHTML() {
   const expCard = exp.total > 0 ? '<section><button class="card pad" style="width:100%;display:flex;justify-content:space-between;gap:12px;align-items:baseline" data-act="tab" data-tab="savings"><span>Money you are expecting</span><span class="mono"><b>' + money(exp.total) + '</b></span></button></section>' : '';
   const dueK = demo ? null : L.dueReview(S.months, NOW_KEY, S.profile.reviews || []);
   const revCard = dueK ? '<section><button class="card pad stack" style="width:100%" data-act="review-open" data-auto="1"><b>Your 6-month review is ready</b><span class="small muted">' + L.periodLabel(dueK[0]) + ' to ' + L.periodLabel(dueK[5]) + '. Tap to see how the half year went.</span></button></section>' : '';
-  return '<section class="hero">' + hero + '</section>' + carryCardHTML() + revCard + tripCard + winCard + extraHTML(M) + (cur ? comingUpCard() : '') + creditHTML() + expCard +
+  return '<section class="hero">' + hero + '</section>' + carryCardHTML() + revCard + tripCard + winCard + extraHTML(M) + (cur ? comingUpCard() : '') + priceAlertHTML() + creditHTML() + expCard +
     '<section><h2>Where the budget stands</h2>' + stand + '</section>' +
     '<section><h2>Needs attention' + (att.length ? ' <span class="cbadge">' + att.length + '</span>' : '') + '</h2>' + attn + '</section>' +
     '<section><h2>By category</h2>' + cats + '</section>' +
@@ -3062,7 +3102,7 @@ function reviewSheet(keys, auto) {
 }
 function activityHTML() {
   const seg = spSegHTML();
-  if (sp.view === 'insights') return seg + periodBarHTML() + yearReviewHTML() + insightsHTML();
+  if (sp.view === 'insights') return seg + periodBarHTML() + priceHistoryHTML() + yearReviewHTML() + insightsHTML();
   if (sp.view === 'charts') return seg + dailyChartsHTML('run') + catBreakHTML() + flowHTML() + compareHTML() + heatHTML();
   const range = sp.view === 'range';
   const filters = '<section><div class="card pad stack">' +
@@ -3204,6 +3244,23 @@ function extraHTML(M) {
     (E.covers > 0 ? '<div class="kv"><span>Covered spending above your salary</span><span class="mono neg">-' + money(E.covers) + '</span></div>' : '') +
     '<div class="kv"><span><b>Extra that moves to savings</b></span><span class="mono"><b>' + money(E.toSavings) + '</b></span></div>' +
     '<div class="kv"><span>Can go to savings this month, with unspent salary</span><span class="mono"><b>' + money(E.canSave) + '</b></span></div></div></section>';
+}
+function riseMoney(x, cur) { return cur ? moneyIn(x, cur, true) : money(x, true); }
+function priceAlertHTML() {
+  if (demo || VIEWING) return '';
+  const R = L.priceRises(S.profile, S.months, L.today()).filter(function (r) { return r.fresh; });
+  if (!R.length) return '';
+  const rows = R.slice(0, 4).map(function (r) {
+    return '<div class="kv"><span>' + esc(r.name) + '<span class="small muted" style="display:block">' + riseMoney(r.from, r.cur) + ' to ' + riseMoney(r.to, r.cur) + ' (+' + Math.round(r.pct * 100) + '%) since ' + L.dateLabel(r.since) + '</span></span><span><b class="mono neg">+' + riseMoney(r.to - r.from, r.cur) + '</b> <button class="link" data-act="rise-seen" data-k="' + esc(r.key) + '" data-to="' + r.to + '">Got it</button></span></div>';
+  }).join('');
+  return '<section><h2>Price went up</h2><div class="card list">' + rows + '</div><p class="small muted" style="padding:6px 4px 0">About ' + money(R.reduce(function (a, r) { return a + r.extraYear; }, 0)) + ' more a year. Check if you still need them or can switch.</p></section>';
+}
+function priceHistoryHTML() {
+  const R = L.priceRises(S.profile, S.months, L.today());
+  const rows = R.map(function (r) {
+    return '<div class="kv"><span>' + esc(r.name) + '<span class="small muted" style="display:block">' + L.dateLabel(r.since) + ' ' + r.since.slice(0, 4) + ': ' + riseMoney(r.from, r.cur) + ' to ' + riseMoney(r.to, r.cur) + ' (+' + Math.round(r.pct * 100) + '%)</span></span><b class="mono neg">+' + riseMoney(r.to - r.from, r.cur) + '</b></div>';
+  }).join('');
+  return '<section><h2>Price changes</h2><div class="card list">' + (rows || '<div class="kv"><span class="muted">No price rises found in the last 12 months for bills and subscriptions you pay every month.</span></div>') + '</div></section>';
 }
 function creditHTML() {
   if (demo) return '';
@@ -4624,6 +4681,7 @@ function onAction(act, el) {
       CCK = null; closeSheet(); render(); toast('Added ' + n + (n === 1 ? ' payment' : ' payments') + ' from your statement', undoImport(ids));
       break;
     }
+    case 'rise-seen': mutate(function () { S.profile.riseSeen = S.profile.riseSeen || {}; S.profile.riseSeen[el.dataset.k + '|' + Number(el.dataset.to)] = 1; markProfile(); }); render(); break;
     case 'taps-import': addTapsBulk(val('tapstext')); break;
     case 'backup-copy': {
       const t = backupText();
