@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:11'; window.__BID__ = '2026-11-09 00:11:09';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:14'; window.__BID__ = '2026-11-09 00:14:09';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -5423,7 +5423,7 @@ function tidyTwo() {
   mutate(function () {
     const bills = S.profile.bills || [];
     const gone = {};
-    for (let i = bills.length - 1; i >= 0; i--) { if (/^\s*to bbma\s*$/i.test(bills[i].name || '') || /washing machine/i.test(bills[i].name || '')) { gone[bills[i].name] = 1; bills.splice(i, 1); n++; } }
+    for (let i = bills.length - 1; i >= 0; i--) { if (/^\s*to bbma\s*$/i.test(bills[i].name || '')) { gone[bills[i].name] = 1; bills.splice(i, 1); n++; } }
     Object.keys(S.months).forEach(function (k) {
       const m = S.months[k], arr = Array.isArray(m) ? m : (m && (m.tx || m.txs)); if (!arr) return;
       for (let j = arr.length - 1; j >= 0; j--) {
@@ -5434,7 +5434,18 @@ function tidyTwo() {
     });
     S.profile.tidy = 2; markProfile();
   });
-  if (n) setTimeout(function () { toast('Tidied: BBma is no longer a fixed \u20ac300 bill, Coolblue washing machine is no longer monthly, the \u20ac45 is filed under BBma'); render(); }, 900);
+  if (n) setTimeout(function () { toast('Tidied: BBma is no longer a fixed \u20ac300 bill, the \u20ac45 is filed under BBma'); render(); }, 900);
+}
+function tidyThree() {
+  if (demo || VIEWING || (S.profile.tidy || 0) >= 3) return;
+  mutate(function () {
+    const bills = S.profile.bills = S.profile.bills || [];
+    if (!bills.some(function (b) { return /washing machine/i.test(b.name || ''); })) bills.push({ id: 'ssmbwt5rsx', name: 'Washing machine Coolblue', cat: 'Subscriptions', amount: 30, day: 28 });
+    const has = Object.keys(S.months).some(function (k) { const m = S.months[k]; return (Array.isArray(m) ? m : []).some(function (t) { return /washing machine/i.test(t.m || '') && t.src === 'bill' && t.d >= '2026-10-24'; }); });
+    if (!has) { const k = '2026-10'; (S.months[k] = S.months[k] || []).push({ id: L.uid(), d: '2026-10-28', m: 'Washing machine Coolblue', a: 30, c: 'Subscriptions', src: 'bill', bid: 'ssmbwt5rsx' }); markMonth(k); }
+    S.profile.tidy = 3; markProfile();
+  });
+  setTimeout(function () { try { ensureBills(); } catch (e) { /* ignore */ } render(); toast('Washing machine \u20ac30 a month is back as a subscription'); }, 1100);
 }
 async function boot() {
   const name = location.hash.replace(/^#/, '');
@@ -5445,7 +5456,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo();
+  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
