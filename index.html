@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 21:57'; window.__BID__ = '2026-11-08 21:57:05';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:08'; window.__BID__ = '2026-11-08 22:08:42';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -934,6 +934,12 @@ function parseStatement(text, opts, rules, existing) {
     if (a > 0 && c === 'Income') c = 'Other';
     a = Math.round(a * 100) / 100;
     const t = { d: d, m: m, a: a, c: c };
+    if (a < 0) {
+      const dm = /description:\s*(.*?)(?:\s+iban:|$)/i.exec(String(r[r.length - 1] || '') + ' ' + raw) || /description:\s*(.*?)(?:\s+iban:|$)/i.exec(r.join(' '));
+      const ds = dm ? dm[1] : '';
+      if (/per\s*diem|dagvergoeding/i.test(ds)) t.kind = 'perdiem';
+      else if (/expense|public transport|openbaar vervoer|mobiel|mobile|internet|reimburs|declarat|onkosten|vergoeding|travel cost|reiskosten/i.test(ds)) t.kind = 'refund';
+    }
     t.dup = !!(existing[txKey(t)] || existing['da|' + t.d + '|' + Number(t.a).toFixed(2)]);
     out.push(t);
   });
@@ -998,8 +1004,10 @@ function analyzeHistory(rows, profile) {
     const k = periodKeyOf(r.d), bk = r.bank || '?';
     const sp = span[bk] = span[bk] || { from: r.d, to: r.d, n: 0 };
     if (r.d < sp.from) sp.from = r.d; if (r.d > sp.to) sp.to = r.d; sp.n++;
-    const p = per[k] = per[k] || { inc: 0, spend: 0, fixed: 0, byCat: {}, n: 0, bn: {} };
+    const p = per[k] = per[k] || { inc: 0, spend: 0, fixed: 0, byCat: {}, n: 0, bn: {}, pd: 0, refund: 0 };
     p.n++; p.bn[bk] = (p.bn[bk] || 0) + 1;
+    if (r.a < 0 && r.kind === 'perdiem') { p.pd += -r.a; return; }
+    if (r.a < 0 && r.kind === 'refund') { p.refund += -r.a; p.spend -= -r.a; return; }
     if (r.a < 0) { p.inc += -r.a; return; }
     p.spend += r.a; p.byCat[r.c] = (p.byCat[r.c] || 0) + r.a;
     if (typeOf(profile, r.c) === 'fixed') p.fixed += r.a;
@@ -1036,7 +1044,7 @@ function analyzeHistory(rows, profile) {
   return { built: maxD, from: minD, to: maxD, n: use.length, keys: keys, months: per, merchants: merchants, rec: rec, banks: span, incTop: incTop, incOut: incOut };
 }
 /* Numbers for the year review, from complete months only */
-function historyStats(h, profile) {
+function historyStats(h, profile, tripSpent) {
   if (!h) return null;
   const oo = (profile && profile.oneoff) || {};
   const skip = (profile && profile.histSkip) || {};
@@ -1050,6 +1058,10 @@ function historyStats(h, profile) {
     inc += p.inc; sp += p.spend - o; fx += p.fixed - ofx; one += o;
     if (p.inc > p.spend) up++;
   });
+  let pdSum = 0, refSum = 0;
+  ks.forEach(function (k) { pdSum += h.months[k].pd || 0; refSum += h.months[k].refund || 0; });
+  const pdLeft = Math.max(0, pdSum - (Number(tripSpent) || 0));
+  inc += pdLeft;
   saved = inc - sp - one;
   const n = ks.length, half = Math.min(3, Math.floor(n / 2));
   const cats = Object.keys(cat).map(function (c) {
@@ -1061,7 +1073,7 @@ function historyStats(h, profile) {
   }).sort(function (a, b) { return b.total - a.total; });
   const best = ks.slice().sort(function (a, b) { return (h.months[b].inc - h.months[b].spend) - (h.months[a].inc - h.months[a].spend); });
   const dear = ks.slice().sort(function (a, b) { return h.months[b].spend - h.months[a].spend; });
-  return { n: n, inc: inc, spend: sp, oneoff: one, saved: saved, rate: inc > 0 ? saved / inc : null, avgInc: inc / n, avgSp: sp / n, fixedShare: sp > 0 ? fx / sp : 0, up: up, cats: cats, bestKey: best[0], dearKey: dear[0] };
+  return { n: n, inc: inc, pd: pdSum, pdSpent: Math.min(pdSum, Number(tripSpent) || 0), pdLeft: pdLeft, refund: refSum, spend: sp, oneoff: one, saved: saved, rate: inc > 0 ? saved / inc : null, avgInc: inc / n, avgSp: sp / n, fixedShare: sp > 0 ? fx / sp : 0, up: up, cats: cats, bestKey: best[0], dearKey: dear[0] };
 }
 
 /* Same payee under two names (for example family members): rename to the second name */
@@ -2887,7 +2899,9 @@ function yearReviewHTML() {
   if (!h) {
     return '<section><h2>Year review</h2><div class="card pad stack"><b>See the last 12 to 24 months</b><span class="small muted">Choose your ING CSV files and ABN AMRO TXT files together, up to 24 months. The app finds your income, spending, fixed costs and trends. Nothing is added to your ledger, so there is no double counting.</span>' + pick + '</div></section>';
   }
-  const st = L.historyStats(h, S.profile);
+  const okKeys = h.keys.filter(function (k) { return !h.months[k].partial && !(S.profile.histSkip || {})[k]; });
+  let tripSp = 0; okKeys.forEach(function (k) { if (S.months[k]) tripSp += L.totals(S.months, k).tripSpent || 0; });
+  const st = L.historyStats(h, S.profile, tripSp);
   if (!st) return '<section><h2>Year review</h2><div class="card pad stack"><span class="small muted">Not enough full months in those files. Choose files that cover at least two months.</span>' + pick + '</div></section>';
   const keys = h.keys, nK = keys.length;
   const nPart = keys.filter(function (k) { return h.months[k].partial; }).length;
@@ -2927,14 +2941,15 @@ function yearReviewHTML() {
   if (bud > 0) hl.push('Your bills in Budget add up to ' + money(bud) + ' a month. Your typical month in the statements is ' + money(st.avgSp) + '.');
   return '<section><h2>Year review</h2><div class="card pad stack"><div class="small muted">' + L.dateLabel(h.from) + ' ' + h.from.slice(0, 4) + ' to ' + L.dateLabel(h.to) + ' ' + h.to.slice(0, 4) + ' &middot; ' + st.n + ' full months &middot; ' + h.n + ' payments</div>' +
     '<div class="sums" style="margin:0 -16px"><div><span class="k">Income</span><span class="v">' + money(st.inc) + '</span></div><div><span class="k">Spent</span><span class="v">' + money(st.spend) + '</span></div><div><span class="k">Left over</span><span class="v">' + money(st.saved) + '</span></div></div>' +
-    '<div class="chips3"><div><b class="mono">' + money(st.avgSp) + '</b><span>Spent a month</span></div><div><b class="mono">' + money(st.avgInc) + '</b><span>Income a month</span></div><div><b class="mono">' + (st.rate == null ? '–' : Math.round(st.rate * 100) + '%') + '</b><span>Saved</span></div></div></div></section>' +
+    '<div class="chips3"><div><b class="mono">' + money(st.avgSp) + '</b><span>Spent a month</span></div><div><b class="mono">' + money(st.avgInc) + '</b><span>Income a month</span></div><div><b class="mono">' + (st.rate == null ? '–' : Math.round(st.rate * 100) + '%') + '</b><span>Saved</span></div></div>' +
+    (st.pd > 0 ? '<div class="small muted"><b>Per diem:</b> ' + money(st.pd) + ' received, ' + money(st.pdSpent) + ' spent on your trips (from Trips), so ' + money(st.pdLeft) + ' counts as income.' + (tripSp === 0 ? ' No trip spending is logged yet, so all of it counts. Add your trip spending to see the true amount.' : '') + '</div>' : '') +
+    (st.refund > 0 ? '<div class="small muted"><b>Refunds:</b> ' + money(st.refund) + ' paid back by your employer. It is taken off your spending and not counted as income.</div>' : '') + '</div></section>' +
     '<section><h2>Income and spending by month</h2><div class="card pad stack"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Income and spending for each month">' + g + '</svg>' +
     '<div class="legend3"><span><i class="s-l"></i>Income</span><span><i class="s-f"></i>Spending</span><span><i style="background:var(--warn)"></i>Average spending ' + money(st.avgSp) + '</span></div><div class="small muted">Faded bars are left out of the averages: a bank file is missing, or you turned the month off below.</div></div></section>' +
     '<section><h2>Where your income came from</h2><div class="card list">' + ((h.incTop || []).map(function (r) { return '<div class="kv"><span>' + esc(r.name) + '<span class="small muted" style="display:block">' + r.n + ' payments &middot; last ' + L.dateLabel(r.last) + ' ' + r.last.slice(0, 4) + '</span></span><span class="mono">' + money(r.total) + '</span></div>'; }).join('') || '<div class="kv"><span>No incoming payments found</span></div>') +
     ((h.incOut || []).length ? '<div class="kv"><span class="small muted"><b>Left out of income</b> (money moved between your accounts, or marked as a transfer)</span></div>' + h.incOut.map(function (r) { return '<div class="kv"><span>' + esc(r.name) + '<span class="small muted" style="display:block">' + r.n + ' payments &middot; ' + esc(r.why) + '</span></span><span class="mono">' + money(r.total) + '</span></div>'; }).join('') : '') + '</div></section>' +
-    '<section><h2>Which months count?</h2><div class="card pad stack"><span class="small muted">Turn off months that were not typical, like a time without a job. Your averages, budget and highlights use only the months that stay on.</span>' +
-    '<div class="btns"><button class="btn sm ghost" data-act="hist-last" data-n="3">Last 3</button><button class="btn sm ghost" data-act="hist-last" data-n="6">Last 6</button><button class="btn sm ghost" data-act="hist-last" data-n="12">Last 12</button><button class="btn sm ghost" data-act="hist-last" data-n="0">All</button></div>' +
-    '<div class="chips">' + keys.filter(function (k) { return !h.months[k].partial; }).map(function (k) { return '<button data-act="hist-skip" data-k="' + k + '" aria-pressed="' + !((S.profile.histSkip || {})[k]) + '">' + L.periodLabel(k) + '</button>'; }).join('') + '</div></div></section>' +
+    '<section><h2>Which months count?</h2><div class="card pad stack"><span class="small muted">Months follow the period you picked at the top. You can also turn off single months that were not typical, like a time without a job.</span>' +
+        '<div class="chips">' + keys.filter(function (k) { return !h.months[k].partial; }).map(function (k) { return '<button data-act="hist-skip" data-k="' + k + '" aria-pressed="' + !((S.profile.histSkip || {})[k]) + '">' + L.periodLabel(k) + '</button>'; }).join('') + '</div></div></section>' +
     '<section><h2>Where it went</h2><div class="card pad stack">' + catRows + '<div class="small muted">Arrows compare the last 3 months with the 3 before.</div></div></section>' +
     '<section><div class="card pad stack"><b>Use this as your budget</b><span class="small muted">Sets the limit for each everyday category to your typical month from these statements. One-off categories are left out. You can review it before anything changes.</span><div class="btns"><button class="btn" data-act="hist-budget">Review budget</button></div></div></section>' +
     '<section><h2>Highlights</h2><div class="card pad stack">' + hl.map(function (x) { return '<div>' + x + '</div>'; }).join('') + '</div></section>' +
@@ -2943,10 +2958,21 @@ function yearReviewHTML() {
     (subRows ? '<section><h2>Subscription watch</h2><div class="card list">' + subRows + '</div></section>' : '') +
     '<section><div class="card pad stack"><span class="small muted">Credit card spending is not in these files, so your real spending can be higher. Money you moved between your own accounts is left out.</span>' + pick + '<div class="btns"><button class="btn sm ghost danger" data-act="yr-clear">Remove this review</button></div></div></section>';
 }
+const SCOPES = [['3', '3 months'], ['6', '6 months'], ['12', '12 months'], ['ytd', 'This year'], ['all', 'Everything']];
+function periodBarHTML() {
+  return '<section><div class="card pad stack"><b>Period</b><div class="chips">' + SCOPES.map(function (p) { return '<button data-act="scope-set" data-v="' + p[0] + '" aria-pressed="' + (sp.scope === p[0]) + '">' + p[1] + '</button>'; }).join('') + '</div><span class="small muted">Everything below uses this period: your bank files, your ledger and the review.</span></div></section>';
+}
+function scopeMonths() { return sp.scope === '3' ? 3 : sp.scope === '6' ? 6 : sp.scope === '12' ? 12 : sp.scope === 'ytd' ? Math.max(1, Number(L.today().slice(5, 7))) : 12; }
+function applyScopeToHist() {
+  const hh = S.profile.hist; if (!hh) return;
+  const ok = hh.keys.filter(function (k) { return !hh.months[k].partial; });
+  const n = sp.scope === 'all' ? 0 : scopeMonths();
+  mutate(function () { const p = S.profile; p.histSkip = {}; if (n > 0) ok.slice(0, Math.max(0, ok.length - n)).forEach(function (k) { p.histSkip[k] = true; }); markProfile(); });
+}
 function insightsHTML() {
   const today = L.today(), first = L.firstTxDate(S.months);
   if (!first) return '<section><div class="card empty">Add some spending and your totals and yearly outlook appear here.</div></section>';
-  let start = sp.scope === 'all' ? first : sp.scope === 'ytd' ? today.slice(0, 4) + '-01-01' : addDaysStr(today, -364);
+  let start = sp.scope === 'all' ? first : sp.scope === 'ytd' ? today.slice(0, 4) + '-01-01' : addDaysStr(today, -(sp.scope === '3' ? 90 : sp.scope === '6' ? 181 : 364));
   if (start < first) start = first;
   const P = L.projectionStats(S.profile, S.months, start, today, today);
   const st = P.st;
@@ -2959,7 +2985,7 @@ function insightsHTML() {
   const sal = S.profile.income > 0;
   const kv = function (a, b, strong) { return '<div class="kv"><span>' + a + '</span>' + (strong ? '<b class="mono">' : '<span class="mono">') + b + (strong ? '</b>' : '</span>') + '</div>'; };
   const early = P.days < 60;
-  return '<section><div class="card pad"><label>Period<select id="isc"><option value="12"' + (sp.scope === '12' ? ' selected' : '') + '>Last 12 months</option><option value="ytd"' + (sp.scope === 'ytd' ? ' selected' : '') + '>This year</option><option value="all"' + (sp.scope === 'all' ? ' selected' : '') + '>Everything so far</option></select></label></div></section>' +
+  return '' +
     '<section class="hero"><div class="eyebrow">Total spent &middot; ' + L.dateLabel(start) + (start.slice(0, 4) !== today.slice(0, 4) ? ' ' + start.slice(0, 4) : '') + ' to today &middot; ' + P.days + ' days</div><div class="big mono">' + money(everything) + '</div>' +
     '<div class="sub">Everything, including fixed bills and trips</div></section>' +
     '<section><div class="card list">' + kv('Everyday spending', money(st.variable)) + kv('Fixed bills logged', money(st.bills)) +
@@ -2974,7 +3000,7 @@ function insightsHTML() {
     (P.yearTrips > 0 || P.yearPerDiem > 0 ? kv('Trips spending', '&minus;' + money(P.yearTrips)) + kv('Per diem received', '+' + money(P.yearPerDiem)) : '') +
     (sal ? kv('Could be saved in a year', money(P.saved), true) + kv('About per month', money(P.saved / 12)) : '') + '</div>' +
     '<p class="small muted" style="padding:8px 4px 0">' + (early ? 'Only ' + P.days + ' days of data so far, so this is a rough guide. ' : '') + 'Everyday spending and trips are your daily average over this period scaled to 365 days. Fixed bills are your monthly bills times 12.</p></section>' +
-    '<section><button class="btn ghost" style="width:100%" data-act="review-open">Review the last 6 months</button></section>';
+    '<section><button class="btn ghost" style="width:100%" data-act="review-open">Review the last ' + (sp.scope === 'all' ? 12 : scopeMonths()) + ' months</button></section>';
 }
 function reviewSheet(keys, auto) {
   const R = L.reviewStats(S.profile, S.months, keys);
@@ -3001,7 +3027,7 @@ function reviewSheet(keys, auto) {
 }
 function activityHTML() {
   const seg = spSegHTML();
-  if (sp.view === 'insights') return seg + yearReviewHTML() + insightsHTML();
+  if (sp.view === 'insights') return seg + periodBarHTML() + yearReviewHTML() + insightsHTML();
   if (sp.view === 'charts') return seg + dailyChartsHTML('run') + catBreakHTML() + flowHTML() + compareHTML() + heatHTML();
   const range = sp.view === 'range';
   const filters = '<section><div class="card pad stack">' +
@@ -4017,7 +4043,7 @@ function onAction(act, el) {
     case 'review-open': {
       let keys = el.dataset.auto ? L.dueReview(S.months, NOW_KEY, S.profile.reviews || []) : null;
       const auto = !!keys;
-      if (!keys) { keys = []; for (let i = 5; i >= 0; i--) keys.push(L.addMonths(NOW_KEY, -i)); }
+      if (!keys) { keys = []; const nn = el.dataset.auto ? 6 : (sp.scope === 'all' ? 12 : scopeMonths()); for (let i = nn - 1; i >= 0; i--) keys.push(L.addMonths(NOW_KEY, -i)); }
       reviewKeys = keys; reviewSheet(keys, auto); break;
     }
     case 'review-seen': mutate(function () { S.profile.reviews = (S.profile.reviews || []).concat([{ to: el.dataset.to, seen: L.today() }]); markProfile(); }); closeSheet(); render(); toast('Review saved'); break;
@@ -4473,6 +4499,7 @@ function onAction(act, el) {
     case 'view-open-saved': { const sh = readShared(); if (sh) enterView(sh); else toast('Nothing saved yet'); break; }
     case 'view-exit': exitView(); break;
     case 'hist-skip': { const k = el.dataset.k; mutate(function () { const p = S.profile; p.histSkip = p.histSkip || {}; if (p.histSkip[k]) delete p.histSkip[k]; else p.histSkip[k] = true; markProfile(); }); render(); break; }
+    case 'scope-set': sp.scope = el.dataset.v; applyScopeToHist(); render(); break;
     case 'hist-last': {
       const n = Number(el.dataset.n) || 0, hh = S.profile.hist;
       if (!hh) break;
