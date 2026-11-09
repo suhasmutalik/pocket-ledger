@@ -586,6 +586,24 @@ html.sky body { background: var(--bg); }
 .cb-bar { display: block; height: 8px; border-radius: 99px; background: var(--w05); overflow: hidden; }
 .cb-bar i { display: block; height: 100%; border-radius: 99px; }
 
+.piedial { width: min(100%, 320px); margin: 0 auto; display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: grab; color: var(--ink); }
+.piedial .pie-s { stroke: var(--surface); stroke-width: 1.6; transition: opacity .2s; cursor: pointer; }
+.piedial .pie-s.dim { opacity: .42; }
+.piedial .pie-s.on { opacity: 1; filter: drop-shadow(0 0 6px rgba(255,255,255,.25)); }
+.piedial .pie-ptr { fill: var(--ink); }
+.piedial .dn-l { fill: var(--muted, #8a93a0); font-size: 11px; }
+.piedial .dn-v { fill: var(--ink); font-size: 22px; font-weight: 600; }
+.cb-bar.thin { height: 4px; margin-top: -2px; }
+.cmp-up { color: #E5604D; font-size: 13px; font-weight: 600; }
+.cmp-dn { color: var(--g1); font-size: 13px; font-weight: 600; }
+.cmp-same { color: var(--muted, #8a93a0); font-size: 13px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; }
+svg.heat { width: 100%; height: auto; display: block; }
+.heat .hm-l { fill: var(--ink); font-size: 10.5px; }
+.heat .hm-d { fill: var(--muted, #8a93a0); font-size: 9.5px; }
+.heat .hm-we { fill: var(--w04); }
+.heat .hm-c { cursor: pointer; }
+
 </style>
 </head>
 <body>
@@ -598,7 +616,7 @@ html.sky body { background: var(--bg); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:11'; window.__BID__ = '2026-11-08 16:11:18';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:21'; window.__BID__ = '2026-11-08 16:21:56';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2394,19 +2412,161 @@ function catBreakHTML() {
   const sel = rows.filter(function (r) { return r.cat === catSel; })[0];
   const cnt = sel ? allTx().filter(function (t) { return !t.tr && t.c === sel.cat && t.d >= from && t.d <= to && t.a > 0; }).length : 0;
   const top = rows[0].v;
-  const strip = rows.map(function (r, i) {
+  /* rotary dial pie: swipe sideways to turn it, the slice under the pointer is selected */
+  let cum = 0;
+  PIE.rows = rows.map(function (r, i) { const a0 = cum / total * 360; cum += r.v; return { cat: r.cat, v: r.v, a0: a0, a1: cum / total * 360, col: CAT_PAL[i % CAT_PAL.length] }; });
+  PIE.total = total; PIE.lastTotalLabel = money(total);
+  if (sel) { const pr = PIE.rows.filter(function (r) { return r.cat === sel.cat; })[0]; if (pr && !PIE.drag) PIE.rot = -((pr.a0 + pr.a1) / 2); }
+  const cx = 120, cy = 132, ro = 104, ri = 60;
+  const pt = function (r, ang) { const t = ang * Math.PI / 180; return (cx + r * Math.sin(t)).toFixed(2) + ',' + (cy - r * Math.cos(t)).toFixed(2); };
+  const sector = function (a0, a1) {
+    const span = Math.min(359.99, a1 - a0), big = span > 180 ? 1 : 0;
+    return 'M' + pt(ro, a0) + ' A' + ro + ',' + ro + ' 0 ' + big + ' 1 ' + pt(ro, a0 + span) + ' L' + pt(ri, a0 + span) + ' A' + ri + ',' + ri + ' 0 ' + big + ' 0 ' + pt(ri, a0) + ' Z';
+  };
+  const slices = PIE.rows.map(function (r, i) {
     const on = catSel === r.cat;
-    return '<button class="cb-seg' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '" aria-label="' + esc(r.cat) + '" style="flex:' + r.v.toFixed(2) + ' 1 0;background:' + CAT_PAL[i % CAT_PAL.length] + '"></button>';
+    return '<path class="pie-s' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-i="' + i + '" d="' + sector(r.a0, r.a1) + '" fill="' + r.col + '"></path>';
   }).join('');
-  return '<section><h2>Where it went</h2><div class="card pad stack"><div class="cb-head"><span class="small muted">' + (catSel ? 'Selected' : 'Total spent') + '</span><b class="mono cb-total">' + money(sel ? sel.v : total) + '</b>' + (sel ? '<span class="small muted">' + Math.round(sel.v / total * 100) + '% of spending</span>' : '') + '</div>' +
-    '<div class="cb-strip">' + strip + '</div>' +
-    '<p class="small muted" style="margin:0">Every category is a row you can tap, including the small ones. Trips are not included.</p>' +
+  const lab = sel ? sel : null;
+  const mid = '<text id="pie-l" x="' + cx + '" y="' + (cy - 8) + '" text-anchor="middle" class="dn-l">' + (lab ? esc(lab.cat.length > 15 ? lab.cat.slice(0, 14) + '…' : lab.cat) : 'Total') + '</text>' +
+    '<text id="pie-v" x="' + cx + '" y="' + (cy + 16) + '" text-anchor="middle" class="dn-v">' + money(lab ? lab.v : total) + '</text>' +
+    '<text id="pie-p" x="' + cx + '" y="' + (cy + 34) + '" text-anchor="middle" class="dn-l">' + (lab ? Math.round(lab.v / total * 100) + '% of spending' : 'Turn the dial') + '</text>';
+  const pie = '<svg id="pie" class="piedial" viewBox="0 0 240 250" role="img" aria-label="Spending by category. Swipe sideways to turn the dial."><g id="pieg" style="transform:rotate(' + PIE.rot.toFixed(2) + 'deg);transform-origin:' + cx + 'px ' + cy + 'px">' + slices +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="' + (ro + 7) + '" fill="none" stroke="currentColor" stroke-opacity=".28" stroke-width="5" stroke-dasharray="1.4 11.9"></circle></g>' +
+    '<path class="pie-ptr" d="M108,2 L132,2 L120,' + (cy - ro - 2) + ' Z"></path>' + mid + '</svg>';
+  return '<section><h2>Where it went</h2><div class="card pad stack">' + pie +
+    '<div class="btns" style="justify-content:center"><button class="btn ghost sm" data-act="pie-step" data-d="-1">‹ Previous</button><button class="btn ghost sm" data-act="pie-step" data-d="1">Next ›</button></div>' +
+    '<p class="small muted" style="text-align:center;margin:0">Swipe the dial sideways like an old phone dial, or tap ‹ ›. The slice under the pointer is selected. Trips are not included.</p>' +
     '<div class="cb-list">' + rows.map(function (r, i) {
       const on = catSel === r.cat, col = CAT_PAL[i % CAT_PAL.length];
       return '<button class="cb-row' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><span class="cb-top"><span>' + ce(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + (r.v / total * 100 < 1 ? '<1' : Math.round(r.v / total * 100)) + '%</span></span></span>' +
         '<span class="cb-bar"><i style="width:' + Math.max(2, r.v / top * 100).toFixed(1) + '%;background:' + col + '"></i></span></button>';
     }).join('') + '</div>' +
     (sel ? '<div class="btns"><button class="btn" data-act="cat-open">See ' + cnt + (cnt === 1 ? ' entry' : ' entries') + ' for ' + esc(sel.cat) + '</button></div>' : '') + '</div></section>';
+}
+const PIE = { rows: [], rot: 0, total: 0, drag: null };
+function pieSliceAt(rot) {
+  const ang = (((-rot) % 360) + 360) % 360;
+  for (let i = 0; i < PIE.rows.length; i++) if (ang >= PIE.rows[i].a0 && ang < PIE.rows[i].a1) return i;
+  return PIE.rows.length - 1;
+}
+function pieShow(i) {
+  const r = PIE.rows[i]; if (!r) return;
+  const l = $('#pie-l'), v = $('#pie-v'), p = $('#pie-p');
+  if (l) l.textContent = r.cat.length > 15 ? r.cat.slice(0, 14) + '…' : r.cat;
+  if (v) v.textContent = money(r.v);
+  if (p) p.textContent = Math.round(r.v / PIE.total * 100) + '% of spending';
+  document.querySelectorAll('#pie .pie-s').forEach(function (n, j) { n.classList.toggle('on', j === i); n.classList.toggle('dim', j !== i); });
+}
+function pieApply(rot, smooth) {
+  const g = $('#pieg'); if (!g) return;
+  g.style.transition = smooth ? 'transform .45s cubic-bezier(.2,.8,.2,1)' : 'none';
+  g.style.transform = 'rotate(' + rot.toFixed(2) + 'deg)';
+}
+function pieSnapTo(i) {
+  const r = PIE.rows[i]; if (!r) return;
+  const target = -((r.a0 + r.a1) / 2);
+  let cur = PIE.rot; const k = Math.round((cur - target) / 360);
+  PIE.rot = target + k * 360;
+  pieApply(PIE.rot, true); pieShow(i);
+  clearTimeout(PIE.t);
+  PIE.t = setTimeout(function () { if (catSel !== r.cat) { catSel = r.cat; render(); } }, 480);
+}
+(function pieEvents() {
+  document.addEventListener('pointerdown', function (e) {
+    const svg = e.target.closest && e.target.closest('#pie'); if (!svg) return;
+    clearTimeout(PIE.t);
+    PIE.drag = { x: e.clientX, rot: PIE.rot, moved: 0, last: pieSliceAt(PIE.rot), t: Date.now(), vx: 0, lx: e.clientX, tgt: e.target };
+    try { svg.setPointerCapture(e.pointerId); } catch (er) { /* ignore */ }
+  });
+  document.addEventListener('pointermove', function (e) {
+    const d = PIE.drag; if (!d) return;
+    const dx = e.clientX - d.x; d.moved = Math.max(d.moved, Math.abs(dx));
+    const now = Date.now(); if (now - d.t > 16) { d.vx = (e.clientX - d.lx) / (now - d.t); d.lx = e.clientX; d.t = now; }
+    if (d.moved < 4) return;
+    PIE.rot = d.rot + dx * 0.55; pieApply(PIE.rot, false);
+    const i = pieSliceAt(PIE.rot);
+    if (i !== d.last) { d.last = i; pieShow(i); if (navigator.vibrate) { try { navigator.vibrate(6); } catch (er) { /* ignore */ } } }
+  });
+  const end = function () {
+    const d = PIE.drag; if (!d) return; PIE.drag = null;
+    if (d.moved < 4) { const sl = d.tgt && d.tgt.closest && d.tgt.closest('.pie-s'); if (sl) pieSnapTo(Number(sl.getAttribute('data-i'))); return; }
+    const extra = Math.max(-90, Math.min(90, d.vx * 160));
+    PIE.rot += extra; pieSnapTo(pieSliceAt(PIE.rot));
+  };
+  document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+})();
+function pieStep(dir) {
+  if (!PIE.rows.length) return;
+  let i = catSel ? PIE.rows.findIndex(function (r) { return r.cat === catSel; }) : pieSliceAt(PIE.rot);
+  if (i < 0) i = 0;
+  pieSnapTo((i + dir + PIE.rows.length) % PIE.rows.length);
+}
+/* ---------- everyday spending compared with the same point last month ---------- */
+function compareHTML() {
+  if (sp.view === 'range') return '';
+  const cur = L.periodRange(viewKey), prevKey = L.addMonths(viewKey, -1), pr = L.periodRange(prevKey), today = L.today();
+  const elapsed = today >= cur.start && today <= cur.end ? L.daysBetween(cur.start, today) : L.daysBetween(cur.start, cur.end);
+  const cutoff = L.addDays(pr.start, elapsed) < pr.end ? L.addDays(pr.start, elapsed) : pr.end;
+  const sum = function (list, upto) {
+    const by = {};
+    list.forEach(function (t) {
+      if (t.tr || t.src === 'perdiem' || t.c === 'Income' || t.c === 'Transfer' || (upto && t.d > upto)) return;
+      if (L.typeOf(S.profile, t.c) === 'fixed') return;
+      by[t.c] = (by[t.c] || 0) + t.a;
+    });
+    return by;
+  };
+  const prevList = L.txIn(S.months, prevKey);
+  if (!prevList.length) return '';
+  const A = sum(L.txIn(S.months, viewKey)), B = sum(prevList, cutoff);
+  const cats = Object.keys(A).concat(Object.keys(B).filter(function (c) { return !(c in A); }));
+  const rows = cats.map(function (c) { return { c: c, a: A[c] || 0, b: B[c] || 0 }; }).filter(function (r) { return r.a > 0.5 || r.b > 0.5; }).sort(function (x, y) { return Math.abs(y.a - y.b) - Math.abs(x.a - x.b); });
+  if (!rows.length) return '';
+  const ta = rows.reduce(function (s, r) { return s + r.a; }, 0), tb = rows.reduce(function (s, r) { return s + r.b; }, 0), mx = Math.max.apply(null, rows.map(function (r) { return Math.max(r.a, r.b); }).concat([1]));
+  const diff = function (d) { return Math.abs(d) < 0.5 ? '<span class="cmp-same">same</span>' : d > 0 ? '<span class="cmp-up">↑ ' + money(d) + '</span>' : '<span class="cmp-dn">↓ ' + money(-d) + '</span>'; };
+  return '<section><h2>Compared with last month</h2><div class="card pad stack"><p class="small muted" style="margin:0">Everyday spending (not fixed bills or trips), up to the same day of the cycle last month: day ' + (elapsed + 1) + '.</p>' +
+    '<div class="cb-head"><b class="mono cb-total">' + money(ta) + '</b><span class="small muted">now, against ' + money(tb) + ' then</span>' + diff(ta - tb) + '</div>' +
+    '<div class="cb-list">' + rows.slice(0, 12).map(function (r) {
+      return '<button class="cb-row" data-act="filter-cat" data-cat="' + esc(r.c) + '"><span class="cb-top"><span>' + ce(r.c) + '</span><span class="mono"><b>' + money(r.a) + '</b> ' + diff(r.a - r.b) + '</span></span>' +
+        '<span class="cb-bar"><i style="width:' + Math.max(2, r.a / mx * 100).toFixed(1) + '%;background:var(--g1)"></i></span>' +
+        '<span class="cb-bar thin"><i style="width:' + Math.max(2, r.b / mx * 100).toFixed(1) + '%;background:rgba(140,150,165,.55)"></i></span></button>';
+    }).join('') + '</div><p class="small muted" style="margin:0"><span class="dot" style="background:var(--g1)"></span> This month &nbsp; <span class="dot" style="background:rgba(140,150,165,.55)"></span> Last month, same day</p></div></section>';
+}
+/* ---------- heat map: category by day ---------- */
+let HEAT = {};
+function heatHTML() {
+  if (sp.view === 'range') return '';
+  const r = L.periodRange(viewKey), n = L.daysBetween(r.start, r.end) + 1;
+  const days = []; for (let i = 0; i < n; i++) days.push(L.addDays(r.start, i));
+  const cell = {}, tot = {};
+  L.txIn(S.months, viewKey).forEach(function (t) {
+    if (t.tr || t.src === 'perdiem' || t.src === 'bill' || t.c === 'Income' || t.c === 'Transfer' || !(t.a > 0)) return;
+    if (L.typeOf(S.profile, t.c) === 'fixed') return;
+    const k = t.c + '|' + t.d; cell[k] = (cell[k] || 0) + t.a; tot[t.c] = (tot[t.c] || 0) + t.a;
+  });
+  const cats = Object.keys(tot).sort(function (x, y) { return tot[y] - tot[x]; }).slice(0, 8);
+  if (!cats.length) return '';
+  HEAT = { cell: cell };
+  let mx = 1; cats.forEach(function (c) { days.forEach(function (d) { mx = Math.max(mx, cell[c + '|' + d] || 0); }); });
+  const W = 340, lw = 92, cw = (W - lw - 4) / n, rh = 22, top = 22, H = top + cats.length * rh + 6;
+  let g = '';
+  days.forEach(function (d, i) {
+    const wd = new Date(d + 'T12:00:00').getDay(), x = lw + i * cw;
+    if (wd === 0 || wd === 6) g += '<rect x="' + x.toFixed(1) + '" y="' + (top - 2) + '" width="' + cw.toFixed(1) + '" height="' + (cats.length * rh + 2) + '" class="hm-we"/>';
+    if (i % 5 === 0 || i === n - 1) g += '<text x="' + (x + cw / 2).toFixed(1) + '" y="12" text-anchor="middle" class="hm-d">' + Number(d.slice(8)) + '</text>';
+  });
+  cats.forEach(function (c, ri) {
+    const y = top + ri * rh;
+    g += '<text x="0" y="' + (y + 15) + '" class="hm-l">' + esc((catEmoji(c) + ' ' + (c.length > 11 ? c.slice(0, 10) + '…' : c))) + '</text>';
+    days.forEach(function (d, i) {
+      const v = cell[c + '|' + d] || 0, x = lw + i * cw;
+      const al = v ? (0.22 + 0.78 * Math.sqrt(v / mx)) : 0;
+      g += '<rect class="hm-c" data-act="heat-cell" data-cat="' + esc(c) + '" data-d="' + d + '" x="' + (x + .6).toFixed(1) + '" y="' + (y + 1) + '" width="' + Math.max(2, cw - 1.2).toFixed(1) + '" height="' + (rh - 3) + '" rx="2.5" style="fill:' + (v ? 'var(--g1)' : 'rgba(128,140,152,.16)') + '" fill-opacity="' + (v ? al.toFixed(2) : 1) + '"/>';
+    });
+  });
+  return '<section><h2>Spending by day</h2><div class="card pad stack"><svg class="heat" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Heat map of everyday spending by category and day">' + g + '</svg>' +
+    '<p class="small muted" id="heatcap" style="margin:0">Darker squares mean more spent that day. Tap a square for details. Shaded columns are weekends. Fixed bills and trips are left out.</p></div></section>';
 }
 /* ---------- money flow (income to groups to categories) ---------- */
 const FLOWSMALL = { f: [], v: [] };
@@ -2749,7 +2909,7 @@ function reviewSheet(keys, auto) {
 function activityHTML() {
   const seg = spSegHTML();
   if (sp.view === 'insights') return seg + yearReviewHTML() + insightsHTML();
-  if (sp.view === 'charts') return seg + dailyChartsHTML('run') + catBreakHTML() + flowHTML();
+  if (sp.view === 'charts') return seg + dailyChartsHTML('run') + catBreakHTML() + flowHTML() + compareHTML() + heatHTML();
   const range = sp.view === 'range';
   const filters = '<section><div class="card pad stack">' +
     '<div class="grid2"><label>Search<input id="q" type="search" placeholder="Merchant or category" value="' + esc(filt.q) + '"></label>' +
@@ -3845,6 +4005,12 @@ function onAction(act, el) {
       break;
     }
     case 'flow-pick': closeSheet(); catSel = el.dataset.cat; render(); break;
+    case 'pie-step': pieStep(Number(el.dataset.d)); break;
+    case 'heat-cell': {
+      const k = el.dataset.cat + '|' + el.dataset.d, v = HEAT.cell && HEAT.cell[k], cap = $('#heatcap');
+      if (cap) cap.textContent = el.dataset.cat + ' \u00b7 ' + L.dateLabel(el.dataset.d) + ' \u00b7 ' + (v ? money(v, true) : 'nothing spent');
+      break;
+    }
     case 'cat-edit': catEditSheet(el.dataset.cat); break;
     case 'cat-del': catDelSheet(el.dataset.cat); break;
     case 'cat-save': {
