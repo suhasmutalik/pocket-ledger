@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:53'; window.__BID__ = '2026-11-09 00:53:58';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:57'; window.__BID__ = '2026-11-09 00:57:12';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4636,6 +4636,15 @@ function onAction(act, el) {
         markProfile();
       });
       render(); toast('Added to your savings'); break;
+    case 'acct-edit': acctSheet(Number(el.dataset.i)); break;
+    case 'acct-save': {
+      const nm = val('ac-n').trim(), bal = numval('ac-b');
+      if (!nm || isNaN(bal)) { toast('Enter the account name and its balance'); break; }
+      const i = Number(el.dataset.i);
+      mutate(function () { const l = S.profile.accounts = S.profile.accounts || []; const o = { name: nm, bal: bal, date: L.today() }; if (i >= 0 && l[i]) l[i] = o; else l.push(o); markProfile(); });
+      closeSheet(); render(); toast('Saved'); break;
+    }
+    case 'acct-del': mutate(function () { (S.profile.accounts || []).splice(Number(el.dataset.i), 1); markProfile(); }); closeSheet(); render(); toast('Removed'); break;
     case 'bk-until': mutate(function () { S.profile.bank = Object.assign({}, S.profile.bank || {}, { until: el.dataset.d }); markProfile(); }); foldOpen.__bank = true; render(); break;
     case 'bills-fix':
       mutate(function () { (S.profile.bills || []).filter(function (b) { return b.cat !== 'Transfer'; }).forEach(relocateBill); S.profile.billsFixed = true; markProfile(); syncAll(); });
@@ -5153,7 +5162,7 @@ function calendarHTML() {
   return lockCard +
     '<section><div class="card pad stack"><div class="sec-head"><button class="link" data-act="cal-prev">&lsaquo; Back</button><h3 style="margin:0">' + L.monthLabel(mk, true) + '</h3><button class="link" data-act="cal-next">Next &rsaquo;</button></div>' +
     '<div class="cal-g">' + WD.map(function (w) { return '<span class="cal-w">' + w + '</span>'; }).join('') + cells + '</div>' +
-    '<div class="cal-key small muted"><i class="dt b"></i> payment <i class="dt n"></i> note <i class="dt pay"></i> salary <i class="dt cc"></i> credit card</div></div></section>' + sel + bankHTML() + '<section>' + billDaysHTML() + '</section>';
+    '<div class="cal-key small muted"><i class="dt b"></i> payment <i class="dt n"></i> note <i class="dt pay"></i> salary <i class="dt cc"></i> credit card</div></div></section>' + sel + accountsHTML() + bankHTML() + '<section>' + billDaysHTML() + '</section>';
 }
 function billMonths() {
   const r = L.periodRange(L.periodKeyOf(L.today()));
@@ -5182,6 +5191,28 @@ function setBillDay(id, day) {
     relocateBill(b);
     markProfile(); syncAll();
   });
+}
+/* ---------- my accounts: a balance you typed, minus what you spent from it since ---------- */
+function acctNow(a) {
+  let net = 0;
+  allTx().forEach(function (t) { if (t.card === a.name && t.d > a.date && t.c !== 'Transfer') net += Number(t.a) || 0; });
+  return Math.round(((Number(a.bal) || 0) - net) * 100) / 100;
+}
+function accountsHTML() {
+  if (demo) return '';
+  const list = S.profile.accounts || [];
+  const rows = list.map(function (a, i) {
+    return '<div class="kv"><span>' + esc(a.name) + '<span class="small muted" style="display:block">You said ' + money(a.bal) + ' on ' + L.dateLabel(a.date) + '</span></span><span class="mono"><b>' + money(acctNow(a)) + '</b> <button class="btn sm ghost" data-act="acct-edit" data-i="' + i + '">Change</button></span></div>';
+  }).join('');
+  return '<section><h2>My accounts</h2><div class="card pad stack">' + (rows ? '<div class="list inner" style="margin:0 -16px">' + rows + '</div><p class="small muted">Each balance is what you typed, minus what you logged from that account since. Compare it with your bank and tap Change if it is off.</p>' : '<p class="small muted">Add an account with its balance now. Every expense you log with that account in Paid with lowers it, so you can check it against the bank.</p>') +
+    '<div class="btns"><button class="btn" data-act="acct-edit" data-i="-1">Add an account</button></div></div></section>';
+}
+function acctSheet(i) {
+  const a = i >= 0 ? (S.profile.accounts || [])[i] : null;
+  openSheet('<h3>' + (a ? 'Change account' : 'Add an account') + '</h3><div class="stack">' +
+    '<label>Account or card<input id="ac-n" type="text" list="ac-l" value="' + esc(a ? a.name : '') + '" placeholder="ING Betaalpas"><datalist id="ac-l">' + cardNames().filter(function (n) { return !L.isCredit(S.profile, n); }).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></label>' +
+    '<label>Balance right now<input id="ac-b" type="number" inputmode="decimal" step="0.01" value="' + (a ? acctNow(a) : '') + '" placeholder="0.00"></label>' +
+    '<div class="btns"><button class="btn" data-act="acct-save" data-i="' + i + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (a ? '<button class="btn danger" data-act="acct-del" data-i="' + i + '">Remove</button>' : '') + '</div></div>');
 }
 function bankHTML() {
   if (demo) return '';
