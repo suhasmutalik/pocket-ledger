@@ -604,6 +604,12 @@ svg.heat { width: 100%; height: auto; display: block; }
 .heat .hm-we { fill: var(--w04); }
 .heat .hm-c { cursor: pointer; }
 
+.piedial .pie-s { transition: opacity .25s, transform .25s; }
+.piedial .pie-s.on { transform: translate(var(--tx), var(--ty)); filter: drop-shadow(0 0 7px rgba(255,255,255,.35)); }
+.piedial .pie-s.dim { opacity: .55; }
+.hm-leg { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.hm-leg i { display: inline-block; width: 18px; height: 12px; border-radius: 3px; }
+
 </style>
 </head>
 <body>
@@ -616,7 +622,7 @@ svg.heat { width: 100%; height: auto; display: block; }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:21'; window.__BID__ = '2026-11-08 16:21:56';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:29'; window.__BID__ = '2026-11-08 16:29:51';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2399,7 +2405,8 @@ function addDaysStr(d, n) { const p = d.split('-').map(Number); const x = new Da
 const chartGeo = {};
 /* ---------- where it went: interactive category donut ---------- */
 let catSel = '';
-const CAT_PAL = ['#7be3b5', '#f6c76b', '#8fb8ff', '#f08a6b', '#b79bff', '#5fd3e0', '#ef7fb0', '#c4d96a', '#9aa7b8', '#e0a35a', '#6bc3a0', '#a0a0ff'];
+const CAT_PAL = ['#19D3A2', '#FFB020', '#4C8DFF', '#FF6B6B', '#A875FF', '#22C7E8', '#FF5FA2', '#9BD83A', '#FF8A3D', '#2FBF71', '#7C8CFF', '#E879F9'];
+function pctTxt(f) { const p = f * 100; return (p < 1 ? (p < 0.05 ? '<0.1' : p.toFixed(1)) : Math.round(p)) + '%'; }
 function catBreakHTML() {
   const range = sp.view === 'range';
   let byCat, from, to;
@@ -2413,8 +2420,15 @@ function catBreakHTML() {
   const cnt = sel ? allTx().filter(function (t) { return !t.tr && t.c === sel.cat && t.d >= from && t.d <= to && t.a > 0; }).length : 0;
   const top = rows[0].v;
   /* rotary dial pie: swipe sideways to turn it, the slice under the pointer is selected */
+  /* every slice gets at least a few degrees so tiny categories can still be reached; the label shows the true share */
+  const MINA = 7, nSm = rows.filter(function (r) { return r.v / total * 360 < MINA; }).length, bigSum = rows.reduce(function (s, r) { return s + (r.v / total * 360 < MINA ? 0 : r.v); }, 0);
+  const bigDeg = 360 - nSm * MINA;
   let cum = 0;
-  PIE.rows = rows.map(function (r, i) { const a0 = cum / total * 360; cum += r.v; return { cat: r.cat, v: r.v, a0: a0, a1: cum / total * 360, col: CAT_PAL[i % CAT_PAL.length] }; });
+  PIE.rows = rows.map(function (r, i) {
+    const deg = r.v / total * 360 < MINA ? MINA : (bigSum > 0 ? r.v / bigSum * bigDeg : 0);
+    const a0 = cum; cum += deg;
+    return { cat: r.cat, v: r.v, a0: a0, a1: cum, col: CAT_PAL[i % CAT_PAL.length] };
+  });
   PIE.total = total; PIE.lastTotalLabel = money(total);
   if (sel) { const pr = PIE.rows.filter(function (r) { return r.cat === sel.cat; })[0]; if (pr && !PIE.drag) PIE.rot = -((pr.a0 + pr.a1) / 2); }
   const cx = 120, cy = 132, ro = 104, ri = 60;
@@ -2425,12 +2439,13 @@ function catBreakHTML() {
   };
   const slices = PIE.rows.map(function (r, i) {
     const on = catSel === r.cat;
-    return '<path class="pie-s' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-i="' + i + '" d="' + sector(r.a0, r.a1) + '" fill="' + r.col + '"></path>';
+    const mt = (r.a0 + r.a1) / 2 * Math.PI / 180, tx = (Math.sin(mt) * 7).toFixed(1), ty = (-Math.cos(mt) * 7).toFixed(1);
+    return '<path class="pie-s' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-i="' + i + '" style="--tx:' + tx + 'px;--ty:' + ty + 'px" d="' + sector(r.a0, r.a1) + '" fill="' + r.col + '"></path>';
   }).join('');
   const lab = sel ? sel : null;
   const mid = '<text id="pie-l" x="' + cx + '" y="' + (cy - 8) + '" text-anchor="middle" class="dn-l">' + (lab ? esc(lab.cat.length > 15 ? lab.cat.slice(0, 14) + '…' : lab.cat) : 'Total') + '</text>' +
     '<text id="pie-v" x="' + cx + '" y="' + (cy + 16) + '" text-anchor="middle" class="dn-v">' + money(lab ? lab.v : total) + '</text>' +
-    '<text id="pie-p" x="' + cx + '" y="' + (cy + 34) + '" text-anchor="middle" class="dn-l">' + (lab ? Math.round(lab.v / total * 100) + '% of spending' : 'Turn the dial') + '</text>';
+    '<text id="pie-p" x="' + cx + '" y="' + (cy + 34) + '" text-anchor="middle" class="dn-l">' + (lab ? pctTxt(lab.v / total) + ' of spending' : 'Turn the dial') + '</text>';
   const pie = '<svg id="pie" class="piedial" viewBox="0 0 240 250" role="img" aria-label="Spending by category. Swipe sideways to turn the dial."><g id="pieg" style="transform:rotate(' + PIE.rot.toFixed(2) + 'deg);transform-origin:' + cx + 'px ' + cy + 'px">' + slices +
     '<circle cx="' + cx + '" cy="' + cy + '" r="' + (ro + 7) + '" fill="none" stroke="currentColor" stroke-opacity=".28" stroke-width="5" stroke-dasharray="1.4 11.9"></circle></g>' +
     '<path class="pie-ptr" d="M108,2 L132,2 L120,' + (cy - ro - 2) + ' Z"></path>' + mid + '</svg>';
@@ -2439,7 +2454,7 @@ function catBreakHTML() {
     '<p class="small muted" style="text-align:center;margin:0">Swipe the dial sideways like an old phone dial, or tap ‹ ›. The slice under the pointer is selected. Trips are not included.</p>' +
     '<div class="cb-list">' + rows.map(function (r, i) {
       const on = catSel === r.cat, col = CAT_PAL[i % CAT_PAL.length];
-      return '<button class="cb-row' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><span class="cb-top"><span>' + ce(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + (r.v / total * 100 < 1 ? '<1' : Math.round(r.v / total * 100)) + '%</span></span></span>' +
+      return '<button class="cb-row' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><span class="cb-top"><span>' + ce(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + pctTxt(r.v / total) + '</span></span></span>' +
         '<span class="cb-bar"><i style="width:' + Math.max(2, r.v / top * 100).toFixed(1) + '%;background:' + col + '"></i></span></button>';
     }).join('') + '</div>' +
     (sel ? '<div class="btns"><button class="btn" data-act="cat-open">See ' + cnt + (cnt === 1 ? ' entry' : ' entries') + ' for ' + esc(sel.cat) + '</button></div>' : '') + '</div></section>';
@@ -2455,7 +2470,7 @@ function pieShow(i) {
   const l = $('#pie-l'), v = $('#pie-v'), p = $('#pie-p');
   if (l) l.textContent = r.cat.length > 15 ? r.cat.slice(0, 14) + '…' : r.cat;
   if (v) v.textContent = money(r.v);
-  if (p) p.textContent = Math.round(r.v / PIE.total * 100) + '% of spending';
+  if (p) p.textContent = pctTxt(r.v / PIE.total) + ' of spending';
   document.querySelectorAll('#pie .pie-s').forEach(function (n, j) { n.classList.toggle('on', j === i); n.classList.toggle('dim', j !== i); });
 }
 function pieApply(rot, smooth) {
@@ -2535,6 +2550,11 @@ function compareHTML() {
 }
 /* ---------- heat map: category by day ---------- */
 let HEAT = {};
+const HEAT_STOPS = [[255, 236, 150], [255, 183, 3], [247, 107, 28], [214, 40, 57]];
+function heatColor(t) {
+  const x = Math.max(0, Math.min(1, t)) * (HEAT_STOPS.length - 1), i = Math.min(HEAT_STOPS.length - 2, Math.floor(x)), f = x - i, A = HEAT_STOPS[i], B = HEAT_STOPS[i + 1];
+  return 'rgb(' + [0, 1, 2].map(function (j) { return Math.round(A[j] + (B[j] - A[j]) * f); }).join(',') + ')';
+}
 function heatHTML() {
   if (sp.view === 'range') return '';
   const r = L.periodRange(viewKey), n = L.daysBetween(r.start, r.end) + 1;
@@ -2561,12 +2581,12 @@ function heatHTML() {
     g += '<text x="0" y="' + (y + 15) + '" class="hm-l">' + esc((catEmoji(c) + ' ' + (c.length > 11 ? c.slice(0, 10) + '…' : c))) + '</text>';
     days.forEach(function (d, i) {
       const v = cell[c + '|' + d] || 0, x = lw + i * cw;
-      const al = v ? (0.22 + 0.78 * Math.sqrt(v / mx)) : 0;
-      g += '<rect class="hm-c" data-act="heat-cell" data-cat="' + esc(c) + '" data-d="' + d + '" x="' + (x + .6).toFixed(1) + '" y="' + (y + 1) + '" width="' + Math.max(2, cw - 1.2).toFixed(1) + '" height="' + (rh - 3) + '" rx="2.5" style="fill:' + (v ? 'var(--g1)' : 'rgba(128,140,152,.16)') + '" fill-opacity="' + (v ? al.toFixed(2) : 1) + '"/>';
+      g += '<rect class="hm-c" data-act="heat-cell" data-cat="' + esc(c) + '" data-d="' + d + '" x="' + (x + .6).toFixed(1) + '" y="' + (y + 1) + '" width="' + Math.max(2, cw - 1.2).toFixed(1) + '" height="' + (rh - 3) + '" rx="2.5" style="fill:' + (v ? heatColor(Math.sqrt(v / mx)) : 'rgba(128,140,152,.14)') + '"/>';
     });
   });
   return '<section><h2>Spending by day</h2><div class="card pad stack"><svg class="heat" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Heat map of everyday spending by category and day">' + g + '</svg>' +
-    '<p class="small muted" id="heatcap" style="margin:0">Darker squares mean more spent that day. Tap a square for details. Shaded columns are weekends. Fixed bills and trips are left out.</p></div></section>';
+    '<div class="hm-leg"><span class="small muted">Nothing</span><i style="background:rgba(128,140,152,.14)"></i><span class="small muted">Less</span>' + [0.1, 0.35, 0.6, 0.85, 1].map(function (t) { return '<i style="background:' + heatColor(t) + '"></i>'; }).join('') + '<span class="small muted">More</span></div>' +
+    '<p class="small muted" id="heatcap" style="margin:0">Yellow is a little, red is a lot. Tap a square for details. Shaded columns are weekends. Fixed bills and trips are left out.</p></div></section>';
 }
 /* ---------- money flow (income to groups to categories) ---------- */
 const FLOWSMALL = { f: [], v: [] };
