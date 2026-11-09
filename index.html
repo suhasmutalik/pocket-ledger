@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:39'; window.__BID__ = '2026-11-08 23:39:01';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:43'; window.__BID__ = '2026-11-08 23:43:43';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2209,6 +2209,44 @@ function recentImportIds(mins) {
   });
   return out;
 }
+/* ---------- duplicate purchases: a bank-import row that is the same purchase as one you logged by hand ---------- */
+let DUPS = null;
+function dupWords(m) { return String(m || '').toLowerCase().replace(/[^a-z]+/g, ' ').split(' ').filter(function (w) { return w.length >= 4 && ['usa', 'nld', 'cafe', 'shop', 'store', 'payment', 'betaling', 'hills', 'hillsboro'].indexOf(w) < 0; }); }
+function findDups() {
+  const all = allTx(), used = {}, out = [];
+  const imps = all.filter(function (t) { return t.src === 'import' && t.a > 0 && t.c !== 'Transfer' && t.oa == null; });
+  const mine = all.filter(function (t) { return (t.src === 'sheet' || t.src === 'manual' || t.src === 'tap') && t.a > 0 && t.c !== 'Transfer'; });
+  const day = function (d) { const p = d.split('-').map(Number); return Date.UTC(p[0], p[1] - 1, p[2]) / 864e5; };
+  imps.forEach(function (i) {
+    const iw = dupWords(i.m); if (!iw.length) return;
+    let best = null, bd = 9;
+    mine.forEach(function (o) {
+      if (used[o.id] || (o.card && L.isCredit(S.profile, o.card))) return;
+      const dd = Math.abs(day(i.d) - day(o.d)); if (dd > 3) return;
+      const near = Math.abs(i.a - o.a) <= Math.max(0.3, 0.035 * o.a) || (o.oa != null && Math.abs(i.a - o.oa) <= 0.02);
+      if (!near) return;
+      const ow = dupWords(o.m); if (!ow.some(function (w) { return iw.indexOf(w) >= 0; })) return;
+      const sc = dd * 0.5 + Math.abs(i.a - o.a) / Math.max(o.a, 1) * 10; if (sc < bd) { bd = sc; best = o; }
+    });
+    if (best) { used[best.id] = 1; out.push({ imp: i, mine: best }); }
+  });
+  return out;
+}
+function dupOpen() {
+  DUPS = findDups();
+  if (!DUPS.length) { openSheet('<h3>No duplicates found</h3><p class="small muted">No imported purchase matches something you logged yourself.</p><div class="btns"><button class="btn ghost" data-act="sheet-close">Close</button></div>'); return; }
+  openSheet('<h3>' + DUPS.length + ' purchases are in twice</h3><p class="small muted">Each one is in your ledger from the bank import and from what you logged. I remove the bank copy and keep yours (it has the trip and dollar amount).</p>' +
+    '<div class="list">' + DUPS.map(function (d) { return '<div class="kv"><span>' + esc(d.mine.m) + '<span class="small muted" style="display:block">' + L.dateLabel(d.mine.d) + ' &middot; yours ' + money(d.mine.a, true) + ' &middot; bank copy ' + money(d.imp.a, true) + '</span></span><span class="small muted">remove bank copy</span></div>'; }).join('') + '</div>' +
+    '<div class="btns"><button class="btn" data-act="dup-go">Remove ' + DUPS.length + ' copies</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div>');
+}
+function dupGo() {
+  const d = DUPS || []; DUPS = null; closeSheet();
+  if (!d.length) return;
+  const gone = d.map(function (x) { return JSON.parse(JSON.stringify(x.imp)); });
+  removeIds(gone.map(function (g) { return g.id; }));
+  toast('Removed ' + gone.length + ' double entries', function () { mutate(function () { gone.forEach(function (g) { addTx(g); }); }); render(); toast('Put back'); });
+}
+
 function undoAdd(id) {
   return function () { mutate(function () { const f = findTx(id); if (f) { potGive(f.t); f.arr.splice(f.j, 1); markMonth(f.k); } }); render(); toast('Removed'); refreshRepeat(); };
 }
@@ -3810,6 +3848,7 @@ function addHTML() {
     '<label>CSV file<input id="impfile" type="file"></label>' +
     '<label>Or paste the rows<textarea id="imptext" placeholder="Date,Description,Amount"></textarea></label>' +
     '<div class="btns"><button class="btn" data-act="imp-parse">Review import</button></div><div id="impBox"></div></div></section>' +
+    '<section><h2>Same purchase twice?</h2><div class="card pad stack"><p class="small muted">Finds purchases that came in from a bank import and that you also logged yourself.</p><div class="btns"><button class="btn ghost" data-act="dup-open">Find double entries</button></div></div></section>' +
     '<section><h2>Imported by mistake?</h2><div class="card pad stack"><p class="small muted">This removes only the entries from your most recent import. Your other entries stay as they are.</p><div class="btns"><button class="btn ghost" data-act="imp-undo">Undo last import</button></div></div></section>' +
     '<section><h2>Compare ING and ABN</h2><div class="card pad stack">' +
     '<p class="small muted">Choose both bank files. Nothing is changed until you tap Import. The app shows what is missing from your ledger, and hides money you moved between your own accounts.</p>' +
@@ -4924,6 +4963,8 @@ function onAction(act, el) {
       break;
     }
     case 'imp-cancel': IMP = null; ['#impBox', '#scanBox', '#cmpBox'].forEach(function (s) { const b = $(s); if (b) b.innerHTML = ''; }); break;
+    case 'dup-open': dupOpen(); break;
+    case 'dup-go': dupGo(); break;
     case 'imp-undo': {
       const li = S.profile.lastImport; const ids = li && li.ids && li.ids.length ? li.ids : recentImportIds(27);
       if (!ids.length) { toast('No recent import found'); break; }
