@@ -574,6 +574,18 @@ html.sky body { background: var(--bg); }
 .wrap, .tabs { position: relative; z-index: 1; }
 .tabs { position: fixed; }
 
+.cb-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cb-total { font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+.cb-strip { display: flex; gap: 2px; height: 14px; border-radius: 99px; overflow: hidden; }
+.cb-seg { border: 0; padding: 0; min-width: 4px; height: 100%; border-radius: 3px; transition: opacity .2s, transform .2s; }
+.cb-seg.dim, .cb-row.dim { opacity: .35; }
+.cb-list { display: flex; flex-direction: column; gap: 2px; }
+.cb-row { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; padding: 10px 8px; border: 0; border-radius: 12px; background: transparent; color: var(--ink); font: inherit; transition: background .2s, opacity .2s; }
+.cb-row.on { background: var(--w07); }
+.cb-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 15px; }
+.cb-bar { display: block; height: 8px; border-radius: 99px; background: var(--w05); overflow: hidden; }
+.cb-bar i { display: block; height: 100%; border-radius: 99px; }
+
 </style>
 </head>
 <body>
@@ -586,7 +598,7 @@ html.sky body { background: var(--bg); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:05'; window.__BID__ = '2026-11-08 16:05:32';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:11'; window.__BID__ = '2026-11-08 16:11:18';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2379,28 +2391,25 @@ function catBreakHTML() {
   if (!rows.length) return '';
   const total = rows.reduce(function (a, r) { return a + r.v; }, 0);
   if (catSel && !rows.some(function (r) { return r.cat === catSel; })) catSel = '';
-  const R = 70, C = 2 * Math.PI * R;
-  let off = 0, arcs = '';
-  rows.forEach(function (r, i) {
-    const len = C * r.v / total, col = CAT_PAL[i % CAT_PAL.length];
-    const on = catSel === r.cat;
-    arcs += '<circle class="dn' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '" cx="100" cy="100" r="' + R + '" fill="none" stroke="' + col + '" stroke-width="' + (on ? 30 : 24) + '" stroke-dasharray="' + Math.max(0, len - 1.5).toFixed(2) + ' ' + (C - Math.max(0, len - 1.5)).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 100 100)"></circle>';
-    off += len;
-  });
   const sel = rows.filter(function (r) { return r.cat === catSel; })[0];
   const cnt = sel ? allTx().filter(function (t) { return !t.tr && t.c === sel.cat && t.d >= from && t.d <= to && t.a > 0; }).length : 0;
-  const mid = sel
-    ? '<text x="100" y="92" text-anchor="middle" class="dn-l">' + esc(sel.cat.length > 16 ? sel.cat.slice(0, 15) + '…' : sel.cat) + '</text><text x="100" y="116" text-anchor="middle" class="dn-v">' + money(sel.v) + '</text><text x="100" y="134" text-anchor="middle" class="dn-l">' + Math.round(sel.v / total * 100) + '%</text>'
-    : '<text x="100" y="94" text-anchor="middle" class="dn-l">Total</text><text x="100" y="118" text-anchor="middle" class="dn-v">' + money(total) + '</text>';
-  return '<section><h2>Where it went</h2><div class="card pad stack"><svg class="donut" viewBox="0 0 200 200" role="img" aria-label="Spending by category">' + arcs + mid + '</svg>' +
-    '<p class="small muted" style="text-align:center;margin:0">Tap a slice or a row to see it. Trips are not included.</p>' +
-    '<div class="list">' + rows.map(function (r, i) {
-      const on = catSel === r.cat;
-      return '<button class="dn-row' + (on ? ' on' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><i style="background:' + CAT_PAL[i % CAT_PAL.length] + '"></i><span>' + ce(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + Math.round(r.v / total * 100) + '%</span></span></button>';
+  const top = rows[0].v;
+  const strip = rows.map(function (r, i) {
+    const on = catSel === r.cat;
+    return '<button class="cb-seg' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '" aria-label="' + esc(r.cat) + '" style="flex:' + r.v.toFixed(2) + ' 1 0;background:' + CAT_PAL[i % CAT_PAL.length] + '"></button>';
+  }).join('');
+  return '<section><h2>Where it went</h2><div class="card pad stack"><div class="cb-head"><span class="small muted">' + (catSel ? 'Selected' : 'Total spent') + '</span><b class="mono cb-total">' + money(sel ? sel.v : total) + '</b>' + (sel ? '<span class="small muted">' + Math.round(sel.v / total * 100) + '% of spending</span>' : '') + '</div>' +
+    '<div class="cb-strip">' + strip + '</div>' +
+    '<p class="small muted" style="margin:0">Every category is a row you can tap, including the small ones. Trips are not included.</p>' +
+    '<div class="cb-list">' + rows.map(function (r, i) {
+      const on = catSel === r.cat, col = CAT_PAL[i % CAT_PAL.length];
+      return '<button class="cb-row' + (on ? ' on' : '') + (catSel && !on ? ' dim' : '') + '" data-act="cat-pick" data-cat="' + esc(r.cat) + '"><span class="cb-top"><span>' + ce(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b> <span class="muted small">' + (r.v / total * 100 < 1 ? '<1' : Math.round(r.v / total * 100)) + '%</span></span></span>' +
+        '<span class="cb-bar"><i style="width:' + Math.max(2, r.v / top * 100).toFixed(1) + '%;background:' + col + '"></i></span></button>';
     }).join('') + '</div>' +
     (sel ? '<div class="btns"><button class="btn" data-act="cat-open">See ' + cnt + (cnt === 1 ? ' entry' : ' entries') + ' for ' + esc(sel.cat) + '</button></div>' : '') + '</div></section>';
 }
 /* ---------- money flow (income to groups to categories) ---------- */
+const FLOWSMALL = { f: [], v: [] };
 function flowHTML() {
   if (sp.view === 'range') return '';
   const M = L.monthSummary(S.profile, S.months, viewKey);
@@ -2413,6 +2422,7 @@ function flowHTML() {
     const rows = all.filter(function (r) { return (r.type === 'fixed') === (type === 'fixed'); });
     const big = rows.filter(function (r) { return r.v >= T * 0.015; });
     const small = rows.filter(function (r) { return r.v < T * 0.015; });
+    FLOWSMALL[type === 'fixed' ? 'f' : 'v'] = small;
     if (small.length) big.push({ cat: 'Smaller items', v: small.reduce(function (a, r) { return a + r.v; }, 0), col: '#9aa7b8', type: type, small: true });
     return big;
   }
@@ -2454,7 +2464,7 @@ function flowHTML() {
     g[1].forEach(function (r) {
       const hh = Math.max(10, r.v * k), hs = r.v * k;
       const on = catSel && catSel === r.cat, dim = catSel && !on;
-      const act = r.small ? '' : ' data-act="cat-pick" data-cat="' + esc(r.cat) + '"';
+      const act = r.small ? ' data-act="flow-small" data-grp="' + (g[0] === 'Bills' ? 'f' : 'v') + '"' : ' data-act="cat-pick" data-cat="' + esc(r.cat) + '"';
       ribbons += '<path class="fl-r' + (on ? ' on' : '') + '"' + act + ' d="' + ribbonD(colX[1] + nw, sy, hs, colX[2], y2, hh) + '" fill="' + grad(from ? from.col : r.col, r.col) + '" opacity="' + (on ? '.85' : dim ? '.1' : '.5') + '"/>';
       nodes += '<rect class="fl-n"' + act + ' x="' + colX[2] + '" y="' + y2.toFixed(1) + '" width="' + nw + '" height="' + hh.toFixed(1) + '" rx="3" fill="' + r.col + '" opacity="' + (dim ? '.3' : '1') + '"/>';
       labels += '<text x="' + (colX[2] + 15) + '" y="' + (y2 + Math.max(hh / 2, 6) + 4).toFixed(1) + '" class="fl-t' + (on ? ' on' : '') + '"' + act + '>' + esc(r.cat.length > 14 ? r.cat.slice(0, 13) + '…' : r.cat) + ' ' + money(r.v) + '</text>';
@@ -3829,6 +3839,12 @@ function onAction(act, el) {
       });
       render(); toast('Bill removed'); break;
     case 'new-cat': catSheet(); break;
+    case 'flow-small': {
+      const list = FLOWSMALL[el.dataset.grp] || [];
+      openSheet('<h3>Smaller items</h3><div class="stack"><p class="small muted">Tap one to follow it.</p>' + list.map(function (r) { return '<button class="cb-row" data-act="flow-pick" data-cat="' + esc(r.cat) + '"><span class="cb-top"><span>' + ce(r.cat) + '</span><span class="mono"><b>' + money(r.v) + '</b></span></span></button>'; }).join('') + '<div class="btns"><button class="btn ghost" data-act="sheet-close">Close</button></div></div>');
+      break;
+    }
+    case 'flow-pick': closeSheet(); catSel = el.dataset.cat; render(); break;
     case 'cat-edit': catEditSheet(el.dataset.cat); break;
     case 'cat-del': catDelSheet(el.dataset.cat); break;
     case 'cat-save': {
