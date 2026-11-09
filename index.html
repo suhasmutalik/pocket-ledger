@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:57'; window.__BID__ = '2026-11-08 23:57:25';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:02'; window.__BID__ = '2026-11-09 00:02:22';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1854,6 +1854,13 @@ else root.LedgerLogic = api;
 
 </script>
 <script>
+window.addEventListener('error', function (e) {
+  try {
+    let b = document.getElementById('errbar');
+    if (!b) { b = document.createElement('div'); b.id = 'errbar'; b.style.cssText = 'position:fixed;left:8px;right:8px;bottom:90px;z-index:99999;background:#3a1010;color:#fff;border:1px solid #ff6b6b;border-radius:12px;padding:10px 12px;font:13px/1.4 -apple-system,sans-serif'; document.body.appendChild(b); }
+    b.textContent = 'Something went wrong: ' + (e.message || 'error') + ' (line ' + (e.lineno || '?') + '). Your data is safe. Send this to Claude.';
+  } catch (x) { /* ignore */ }
+});
 (function () {
 'use strict';
 const L = window.LedgerLogic;
