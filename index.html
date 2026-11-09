@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:15'; window.__BID__ = '2026-11-08 22:15:55';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:32'; window.__BID__ = '2026-11-08 22:32:12';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1221,7 +1221,7 @@ function parseQuick(text) {
 function creditCfg(profile) {
   const c = (profile && profile.credit) || {};
   const bd = Math.round(Number(c.billDay));
-  return { match: String(c.match || 'credit').toLowerCase().trim(), billDay: bd >= 1 && bd <= 28 ? bd : 8, paid: c.paid || {} };
+  const lg = Math.round(Number(c.lag)); return { match: String(c.match || 'credit').toLowerCase().trim(), billDay: bd >= 1 && bd <= 28 ? bd : 8, paid: c.paid || {}, lag: lg >= 0 && lg <= 6 ? lg : 0, stmt: c.stmt || {} };
 }
 function isCredit(profile, card) {
   const cfg = creditCfg(profile);
@@ -1238,7 +1238,8 @@ function creditInfo(profile, months, todayStr) {
   const gen = dateYMD(gy, gm, cfg.billDay);
   let py = gy, pm = gm - 1; if (pm < 1) { pm = 12; py -= 1; }
   const prevGen = dateYMD(py, pm, cfg.billDay);
-  const open = { from: addDays(gen, 1), to: addDays(dateYMD(gm === 12 ? gy + 1 : gy, gm === 12 ? 1 : gm + 1, cfg.billDay), 0) };
+  const lag = cfg.lag; /* purchases of the last days are booked after the statement day, so they belong to the next one */
+  const open = { from: addDays(gen, 1 - lag), to: addDays(dateYMD(gm === 12 ? gy + 1 : gy, gm === 12 ? 1 : gm + 1, cfg.billDay), -lag) };
   const tx = [];
   Object.keys(months || {}).forEach(function (k) {
     (months[k] || []).forEach(function (t) { if (t.card && isCredit(profile, t.card) && t.c !== 'Transfer') tx.push(t); });
@@ -1249,13 +1250,14 @@ function creditInfo(profile, months, todayStr) {
     return { total: Math.round(total * 100) / 100, count: count };
   };
   const o = sum(open.from, open.to);
-  const st = sum(addDays(prevGen, 1), gen);
+  const st = sum(addDays(prevGen, 1 - lag), addDays(gen, -lag));
+  if (cfg.stmt[gen] != null && !isNaN(Number(cfg.stmt[gen]))) st.total = Math.round(Number(cfg.stmt[gen]) * 100) / 100;
   const due = lastOfMonth(gy, gm);
   const pays = ((profile && profile.credit && profile.credit.pays) || []).filter(function (p) { return p.key === gen; });
   const paidAmt = Math.round(pays.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0) * 100) / 100;
   const flag = !!cfg.paid[gen];
   const remaining = flag ? 0 : Math.max(0, Math.round((st.total - paidAmt) * 100) / 100);
-  const stmtOut = { from: addDays(prevGen, 1), to: gen, total: st.total, count: st.count, due: due, key: gen, pays: pays, paidAmt: paidAmt, flag: flag, remaining: remaining,
+  const stmtOut = { from: addDays(prevGen, 1 - lag), to: addDays(gen, -lag), total: st.total, count: st.count, due: due, key: gen, pays: pays, paidAmt: paidAmt, flag: flag, remaining: remaining,
     paid: flag || (st.total > 0 && remaining < 0.005), overdue: due < (todayStr || today()) && remaining >= 0.005 };
   return {
     any: tx.length > 0, billDay: cfg.billDay,
