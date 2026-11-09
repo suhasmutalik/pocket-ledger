@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:32'; window.__BID__ = '2026-11-08 22:32:12';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:37'; window.__BID__ = '2026-11-08 22:37:31';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3192,8 +3192,9 @@ function creditHTML() {
       (pays ? '<div class="list inner">' + pays + '</div>' : (st.paid ? '' : ''));
   }
   return '<section><h2>Credit card</h2><div class="card pad stack">' + body +
-    '<div class="row"><span>This statement so far (' + lab(C.open.from) + ' to ' + lab(C.open.to) + ')</span><span class="mono"><b>' + money(C.open.total) + '</b></span></div>' +
-    '<div class="small muted">' + C.open.count + (C.open.count === 1 ? ' payment' : ' payments') + '. The statement is made on day ' + C.billDay + ' and paid by the end of that month.</div></div></section>';
+    '<div class="row"><span>New purchases, next bill (' + lab(C.open.from) + ' to ' + lab(C.open.to) + ')</span><span class="mono"><b>' + money(C.open.total) + '</b></span></div>' +
+    '<div class="small muted">' + C.open.count + (C.open.count === 1 ? ' payment' : ' payments') + '. The statement is made on day ' + C.billDay + ' and paid by the end of that month.</div>' +
+    '<div class="row" style="border-top:1px solid var(--line);padding-top:10px"><span><b>Total you owe on the card now</b><span class="small muted" style="display:block">' + (st.paid ? 'New purchases only' : 'Bill to pay + new purchases') + '</span></span><span class="mono"><b>' + money((st.paid ? 0 : st.remaining) + C.open.total) + '</b></span></div></div></section>';
 }
 function alSheet(id) {
   const t = (S.profile.trips || []).filter(function (x) { return x.id === id; })[0];
