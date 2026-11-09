@@ -655,6 +655,15 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 .hcd.sel { box-shadow: 0 0 0 2px var(--accent, #34c98a) inset; }
 #heatdet { display: flex; flex-direction: column; gap: 2px; }
 
+/* sky: keep text readable when the sky behind is bright (see-through but tinted) */
+html.sky[data-theme="dark"] .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in srgb, var(--hl) 22%, transparent), transparent 62%), linear-gradient(rgba(10, 12, 32, .5), rgba(10, 12, 32, .5)); }
+html.sky[data-theme="dark"] .card, html.sky[data-theme="dark"] .fold { background: rgba(10, 12, 32, .42); }
+html.sky[data-theme="dark"] .chips3 > div { background: rgba(10, 12, 32, .4); }
+html.sky[data-theme="light"] .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in srgb, var(--hl) 18%, transparent), transparent 62%), linear-gradient(rgba(255, 255, 255, .55), rgba(255, 255, 255, .55)); }
+html.sky[data-theme="light"] .card, html.sky[data-theme="light"] .fold { background: rgba(255, 255, 255, .5); }
+html.sky[data-theme="light"] .chips3 > div { background: rgba(255, 255, 255, .45); }
+html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
+
 </style>
 </head>
 <body>
@@ -667,7 +676,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 12:53'; window.__BID__ = '2026-11-09 12:53:40';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 15:04'; window.__BID__ = '2026-11-09 15:04:05';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
