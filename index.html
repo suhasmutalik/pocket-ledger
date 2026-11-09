@@ -622,7 +622,7 @@ svg.heat { width: 100%; height: auto; display: block; }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:29'; window.__BID__ = '2026-11-08 16:29:51';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 16:34'; window.__BID__ = '2026-11-08 16:34:16';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2518,6 +2518,15 @@ function pieStep(dir) {
   pieSnapTo((i + dir + PIE.rows.length) % PIE.rows.length);
 }
 /* ---------- everyday spending compared with the same point last month ---------- */
+let CMP = {};
+function cmpSheet(cat) {
+  const cut = function (t) { return !t.tr && t.src !== 'perdiem' && t.c === cat && t.a > 0; };
+  const now = L.txIn(S.months, viewKey).filter(cut).sort(function (x, y) { return x.d < y.d ? 1 : -1; });
+  const before = L.txIn(S.months, CMP.prevKey).filter(function (t) { return cut(t) && t.d <= CMP.cutoff; }).sort(function (x, y) { return x.d < y.d ? 1 : -1; });
+  const sum = function (l) { return l.reduce(function (s, t) { return s + t.a; }, 0); };
+  const rows = function (l) { return l.length ? l.map(function (t) { return '<div class="kv"><span>' + esc(t.m) + '<span class="small muted" style="display:block">' + L.dateLabel(t.d) + '</span></span><span class="mono">' + money(t.a, true) + '</span></div>'; }).join('') : '<div class="kv"><span class="muted">Nothing</span></div>'; };
+  openSheet('<h3>' + ce(cat) + '</h3><div class="stack"><b>This month: ' + money(sum(now), true) + '</b><div class="card list">' + rows(now) + '</div><b>Last month, same day: ' + money(sum(before), true) + '</b><div class="card list">' + rows(before) + '</div><div class="btns"><button class="btn ghost" data-act="filter-cat" data-cat="' + esc(cat) + '">Open in the Spending list</button><button class="btn" data-act="sheet-close">Close</button></div></div>');
+}
 function compareHTML() {
   if (sp.view === 'range') return '';
   const cur = L.periodRange(viewKey), prevKey = L.addMonths(viewKey, -1), pr = L.periodRange(prevKey), today = L.today();
@@ -2533,6 +2542,7 @@ function compareHTML() {
     return by;
   };
   const prevList = L.txIn(S.months, prevKey);
+  CMP = { prevKey: prevKey, cutoff: cutoff };
   if (!prevList.length) return '';
   const A = sum(L.txIn(S.months, viewKey)), B = sum(prevList, cutoff);
   const cats = Object.keys(A).concat(Object.keys(B).filter(function (c) { return !(c in A); }));
@@ -2543,7 +2553,7 @@ function compareHTML() {
   return '<section><h2>Compared with last month</h2><div class="card pad stack"><p class="small muted" style="margin:0">Everyday spending (not fixed bills or trips), up to the same day of the cycle last month: day ' + (elapsed + 1) + '.</p>' +
     '<div class="cb-head"><b class="mono cb-total">' + money(ta) + '</b><span class="small muted">now, against ' + money(tb) + ' then</span>' + diff(ta - tb) + '</div>' +
     '<div class="cb-list">' + rows.slice(0, 12).map(function (r) {
-      return '<button class="cb-row" data-act="filter-cat" data-cat="' + esc(r.c) + '"><span class="cb-top"><span>' + ce(r.c) + '</span><span class="mono"><b>' + money(r.a) + '</b> ' + diff(r.a - r.b) + '</span></span>' +
+      return '<button class="cb-row" data-act="cmp-open" data-cat="' + esc(r.c) + '"><span class="cb-top"><span>' + ce(r.c) + '</span><span class="mono"><b>' + money(r.a) + '</b> ' + diff(r.a - r.b) + '</span></span>' +
         '<span class="cb-bar"><i style="width:' + Math.max(2, r.a / mx * 100).toFixed(1) + '%;background:var(--g1)"></i></span>' +
         '<span class="cb-bar thin"><i style="width:' + Math.max(2, r.b / mx * 100).toFixed(1) + '%;background:rgba(140,150,165,.55)"></i></span></button>';
     }).join('') + '</div><p class="small muted" style="margin:0"><span class="dot" style="background:var(--g1)"></span> This month &nbsp; <span class="dot" style="background:rgba(140,150,165,.55)"></span> Last month, same day</p></div></section>';
@@ -4025,6 +4035,7 @@ function onAction(act, el) {
       break;
     }
     case 'flow-pick': closeSheet(); catSel = el.dataset.cat; render(); break;
+    case 'cmp-open': cmpSheet(el.dataset.cat); break;
     case 'pie-step': pieStep(Number(el.dataset.d)); break;
     case 'heat-cell': {
       const k = el.dataset.cat + '|' + el.dataset.d, v = HEAT.cell && HEAT.cell[k], cap = $('#heatcap');
