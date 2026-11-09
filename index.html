@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:47'; window.__BID__ = '2026-11-08 23:47:59';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 23:54'; window.__BID__ = '2026-11-08 23:54:16';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2223,14 +2223,34 @@ function findDups() {
     mine.forEach(function (o) {
       if (used[o.id] || (o.card && L.isCredit(S.profile, o.card))) return;
       const bill = o.src === 'bill', dd = Math.abs(day(i.d) - day(o.d)); if (dd > (bill ? 7 : 3)) return;
-      if (bill) { if (Math.abs(i.a - o.a) > Math.max(0.5, 0.01 * o.a) || i.a < 20) return; const sc2 = dd * 0.5 + Math.abs(i.a - o.a); if (sc2 < bd) { bd = sc2; best = o; } return; }
+      if (bill) { if (Math.abs(i.a - o.a) > Math.max(0.5, 0.01 * o.a) || i.a < 20) return; if (i.a < 100 && !dupWords(o.m).some(function (w) { return iw.indexOf(w) >= 0; })) return; const sc2 = dd * 0.5 + Math.abs(i.a - o.a); if (sc2 < bd) { bd = sc2; best = o; } return; }
       if (!iw.length) return;
       const near = Math.abs(i.a - o.a) <= Math.max(0.3, 0.035 * o.a) || (o.oa != null && Math.abs(i.a - o.oa) <= 0.02);
       if (!near) return;
       const ow = dupWords(o.m); if (!ow.some(function (w) { return iw.indexOf(w) >= 0; })) return;
       const sc = dd * 0.5 + Math.abs(i.a - o.a) / Math.max(o.a, 1) * 10; if (sc < bd) { bd = sc; best = o; }
     });
-    if (best) { used[best.id] = 1; out.push({ imp: i, mine: best }); }
+    if (best) { used[best.id] = 1; i.__d = 1; out.push({ imp: i, mine: best }); }
+  });
+  /* several bank rows that add up to the entries you logged in the same category (for example money sent to family in parts) */
+  const rest = imps.filter(function (i) { return !i.__d && i.c !== 'Income'; });
+  imps.forEach(function (i) { delete i.__d; });
+  const cats = {};
+  rest.forEach(function (i) { (cats[i.c] = cats[i.c] || []).push(i); });
+  const sum = function (a) { return a.reduce(function (t, x) { return t + x.a; }, 0); };
+  Object.keys(cats).forEach(function (c) {
+    const list = cats[c].slice().sort(function (x, y) { return x.d < y.d ? -1 : 1; }), clusters = [];
+    list.forEach(function (i) { const l = clusters[clusters.length - 1]; if (l && day(i.d) - day(l[l.length - 1].d) <= 10) l.push(i); else clusters.push([i]); });
+    clusters.forEach(function (g) {
+      if (g.length < 2) return;
+      const lo = day(g[0].d) - 7, hi = day(g[g.length - 1].d) + 7;
+      const cand = mine.filter(function (o) { return !used[o.id] && o.src !== 'bill' && o.c === c && day(o.d) >= lo && day(o.d) <= hi; });
+      if (cand.length >= 2 && Math.abs(sum(g) - sum(cand)) <= 0.5) {
+        cand.forEach(function (o) { used[o.id] = 1; });
+        const nm = cand.map(function (o) { return o.m; }).filter(function (v, k, ar) { return ar.indexOf(v) === k; }).join(', ') + ' (' + cand.length + ' entries, ' + money(sum(cand), true) + ' in total)';
+        g.forEach(function (i) { out.push({ imp: i, mine: { id: cand[0].id, m: nm, d: cand[0].d, a: sum(cand), src: 'sheet' } }); });
+      }
+    });
   });
   return out;
 }
