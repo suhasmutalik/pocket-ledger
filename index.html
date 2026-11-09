@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:14'; window.__BID__ = '2026-11-09 00:14:09';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:29'; window.__BID__ = '2026-11-09 00:29:26';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -5447,6 +5447,30 @@ function tidyThree() {
   });
   setTimeout(function () { try { ensureBills(); } catch (e) { /* ignore */ } render(); toast('Washing machine \u20ac30 a month is back as a subscription'); }, 1100);
 }
+function tidyFour() {
+  if (demo || VIEWING || (S.profile.tidy || 0) >= 4) return;
+  let n = 0;
+  mutate(function () {
+    /* The bank shows BBma got 300 on 24 Oct, 150 on 28 Oct and 45 on 5 Nov. Replace the rough hand entries (100, 50, 80) with the real transfers. */
+    const want = [['2026-10-24', 300], ['2026-10-28', 150]];
+    const fam = [];
+    Object.keys(S.months).forEach(function (k) {
+      const m = S.months[k], arr = Array.isArray(m) ? m : null; if (!arr) return;
+      for (let j = arr.length - 1; j >= 0; j--) {
+        const t = arr[j];
+        if (t.src === 'sheet' && t.c === 'Family (BBma)' && /punjikunje/i.test(t.m || '') && t.d >= '2026-10-24' && t.d <= '2026-11-09' && [100, 50, 80].indexOf(Math.round(t.a)) >= 0) { arr.splice(j, 1); n++; markMonth(k); }
+        else if (t.c === 'Family (BBma)' && t.d >= '2026-10-24' && t.d <= '2026-11-09') fam.push(t);
+      }
+    });
+    want.forEach(function (w) {
+      if (fam.some(function (t) { return t.d === w[0] && Math.abs(t.a - w[1]) < 0.01; })) return;
+      const k = L.monthKey(w[0]);
+      (S.months[k] = S.months[k] || []).push({ id: L.uid(), d: w[0], m: 'B Punjikunje', a: w[1], c: 'Family (BBma)', src: 'import' }); n++; markMonth(k);
+    });
+    S.profile.tidy = 4; markProfile();
+  });
+  if (n) setTimeout(function () { toast('BBma now matches your bank: \u20ac300, \u20ac150 and \u20ac45'); render(); }, 1300);
+}
 async function boot() {
   const name = location.hash.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0) tab = name;
@@ -5456,7 +5480,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree();
+  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree(); tidyFour();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
