@@ -655,7 +655,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:37'; window.__BID__ = '2026-11-08 22:37:31';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '08 Nov 22:39'; window.__BID__ = '2026-11-08 22:39:55';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1230,6 +1230,38 @@ function isCredit(profile, card) {
 function dateYMD(y, m, d) { return ymd(new Date(y, m - 1, d)); }
 function lastOfMonth(y, m) { return dateYMD(y, m, new Date(y, m, 0).getDate()); }
 /* statement generated on billDay; it covers the day after the previous billDay up to billDay; due at the end of that month */
+/* Compare a credit card statement with the ledger. rows: parseStatement rows (a > 0 is spending). */
+function cardCheck(rows, ledger) {
+  const credits = (rows || []).filter(function (r) { return r.a < 0; }).map(function (r) { return { r: r, used: false }; });
+  const spend = (rows || []).filter(function (r) {
+    if (!(r.a > 0) || r.c === 'Transfer') return false;
+    /* a purchase that the card later refunded for the same amount cancels out */
+    for (let i = 0; i < credits.length; i++) { const c = credits[i]; if (!c.used && Math.abs(-c.r.a - r.a) < 0.006 && Math.abs(daysBetween(c.r.d, r.d)) <= 14 && norm(c.r.m).slice(0, 5) === norm(r.m).slice(0, 5)) { c.used = true; return false; } }
+    return true;
+  });
+  if (!spend.length) return null;
+  let minD = spend[0].d, maxD = spend[0].d;
+  spend.forEach(function (r) { if (r.d < minD) minD = r.d; if (r.d > maxD) maxD = r.d; });
+  const lo = addDays(minD, -4), hi = addDays(maxD, -2);
+  const pool = (ledger || []).filter(function (t) { return t.d >= lo && t.d <= addDays(maxD, 4); }).map(function (t) { return { t: t, used: false }; });
+  const miss = [];
+  let matched = 0;
+  spend.slice().sort(function (x, y) { return y.a - x.a; }).forEach(function (r) {
+    let best = null;
+    pool.forEach(function (p, i) {
+      if (p.used) return;
+      if (Math.abs(Number(p.t.a) - r.a) >= 0.06) return;
+      const dd = Math.abs(daysBetween(p.t.d, r.d));
+      if (dd > 21) return;
+      if (!best || dd < best.dd) best = { i: i, dd: dd };
+    });
+    if (best) { pool[best.i].used = true; matched++; } else miss.push(r);
+  });
+  const extra = pool.filter(function (p) { return !p.used && p.t.d >= lo && p.t.d <= hi && Number(p.t.a) > 0 && p.t.c !== 'Transfer'; }).map(function (p) { return p.t; });
+  const sum = function (l, f) { return Math.round(l.reduce(function (a, x) { return a + f(x); }, 0) * 100) / 100; };
+  return { from: minD, to: maxD, matched: matched, missing: miss, extra: extra,
+    fileTotal: sum(spend, function (r) { return r.a; }), missingTotal: sum(miss, function (r) { return r.a; }), extraTotal: sum(extra, function (t) { return Number(t.a); }) };
+}
 function creditInfo(profile, months, todayStr) {
   const cfg = creditCfg(profile);
   const td = (todayStr || today()).split('-').map(Number);
@@ -1742,7 +1774,7 @@ const api = {
   today: today, ymd: ymd, monthKey: monthKey, addMonths: addMonths, daysInMonth: daysInMonth, monthLabel: monthLabel, dateLabel: dateLabel,
   uid: uid, norm: norm, categorize: categorize, ruleKey: ruleKey, applyRule: applyRule, cleanMerchant: cleanMerchant,
   parseCSV: parseCSV, parseMoney: parseMoney, parseDate: parseDate, parseStatement: parseStatement, compareStatements: compareStatements, analyzeHistory: analyzeHistory, historyStats: historyStats, normalizeSpoken: normalizeSpoken, applyAlias: applyAlias, detectRecurring: detectRecurring, txKey: txKey,
-  parseTapHash: parseTapHash, creditInfo: creditInfo, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
+  parseTapHash: parseTapHash, creditInfo: creditInfo, cardCheck: cardCheck, isCredit: isCredit, creditCfg: creditCfg, parseQuick: parseQuick,
   daysBetween: daysBetween, tripFor: tripFor, activeTrip: activeTrip, tripSummary: tripSummary, calOccurrences: calOccurrences, bankCheck: bankCheck, isAbnBill: isAbnBill, lockedMoney: lockedMoney, tripAllowance: tripAllowance, setPayDay: setPayDay, getPayDay: getPayDay, periodKeyOf: periodKeyOf, periodRange: periodRange, periodLabel: periodLabel, txIn: txIn, periodKeys: periodKeys, dailySeries: dailySeries, txBetween: txBetween, dailySeriesRange: dailySeriesRange, rangeStats: rangeStats, projectionStats: projectionStats, dueReview: dueReview, reviewStats: reviewStats, firstTxDate: firstTxDate, firstBillDate: firstBillDate, savingsRoom: savingsRoom, trimIdeas: trimIdeas, addDays: addDays, typeOf: typeOf, catsOf: catsOf, allCatsOf: allCatsOf, convert: convert, totals: totals, incomeFor: incomeFor, autoLimit: autoLimit, monthSummary: monthSummary
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -3194,7 +3226,32 @@ function creditHTML() {
   return '<section><h2>Credit card</h2><div class="card pad stack">' + body +
     '<div class="row"><span>New purchases, next bill (' + lab(C.open.from) + ' to ' + lab(C.open.to) + ')</span><span class="mono"><b>' + money(C.open.total) + '</b></span></div>' +
     '<div class="small muted">' + C.open.count + (C.open.count === 1 ? ' payment' : ' payments') + '. The statement is made on day ' + C.billDay + ' and paid by the end of that month.</div>' +
+    '<div class="btns"><button class="btn sm ghost" data-act="cc-check-open">Check against my statement</button></div>' +
     '<div class="row" style="border-top:1px solid var(--line);padding-top:10px"><span><b>Total you owe on the card now</b><span class="small muted" style="display:block">' + (st.paid ? 'New purchases only' : 'Bill to pay + new purchases') + '</span></span><span class="mono"><b>' + money((st.paid ? 0 : st.remaining) + C.open.total) + '</b></span></div></div></section>';
+}
+let CCK = null;
+function ccCardName() {
+  const c = {}; allTx().forEach(function (t) { if (t.card && L.isCredit(S.profile, t.card)) c[t.card] = (c[t.card] || 0) + 1; });
+  return Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0] || 'Credit card';
+}
+function ccCheckOpen() {
+  openSheet('<h3>Check against my statement</h3><div class="stack"><p class="small muted">Choose your credit card statement as a CSV file, or paste the rows. The app lists what the bank has and your ledger does not, and the other way round. Nothing changes until you tap Add. For a PDF statement, send it to Claude in chat and ask for a CSV.</p>' +
+    '<label>Statement file<input id="ccfile" type="file"></label><label>Or paste the rows<textarea id="cctext" placeholder="Date,Description,Amount"></textarea></label>' +
+    '<div class="btns"><button class="btn" data-act="cc-check-run">Compare</button><button class="btn ghost" data-act="sheet-close">Close</button></div><div id="ccres"></div></div>');
+}
+function ccCheckRun(text) {
+  const res = L.parseStatement(text, { dateFmt: 'auto', sign: 'auto' }, S.profile.rules, {});
+  const box = $('#ccres');
+  if (!res.rows) { box.innerHTML = '<p class="small neg">' + esc(res.error || 'Could not read that file.') + '</p>'; return; }
+  const led = allTx().filter(function (t) { return t.card && L.isCredit(S.profile, t.card); });
+  const R = L.cardCheck(res.rows, led);
+  if (!R) { box.innerHTML = '<p class="small muted">No card purchases found in that file.</p>'; return; }
+  CCK = R;
+  const miss = R.missing.map(function (r) { return '<div class="kv"><span>' + esc(r.m) + '<span class="small muted" style="display:block">' + L.dateLabel(r.d) + '</span></span><span class="mono">' + money(r.a, true) + '</span></div>'; }).join('');
+  const ex = R.extra.map(function (t) { return '<div class="kv"><span>' + esc(t.m) + '<span class="small muted" style="display:block">' + L.dateLabel(t.d) + '</span></span><span class="mono">' + money(t.a, true) + '</span></div>'; }).join('');
+  box.innerHTML = '<div class="card list"><div class="kv"><span>Statement ' + L.dateLabel(R.from) + ' to ' + L.dateLabel(R.to) + '</span><b class="mono">' + money(R.fileTotal, true) + '</b></div><div class="kv"><span>Found in your ledger</span><span class="mono">' + R.matched + ' payments</span></div></div>' +
+    '<h2>On the statement, not in your ledger</h2>' + (miss ? '<div class="card list">' + miss + '<div class="kv"><span><b>Missing in total</b></span><b class="mono">' + money(R.missingTotal, true) + '</b></div></div><div class="btns"><button class="btn" data-act="cc-check-add">Add these ' + R.missing.length + '</button></div>' : '<p class="small muted">Nothing is missing.</p>') +
+    '<h2>In your ledger, not on the statement</h2>' + (ex ? '<div class="card list">' + ex + '<div class="kv"><span><b>In total</b></span><b class="mono">' + money(R.extraTotal, true) + '</b></div></div><p class="small muted">These may be duplicates, have a different amount, or belong to another card. Check them in Spending.</p>' : '<p class="small muted">Nothing extra.</p>');
 }
 function alSheet(id) {
   const t = (S.profile.trips || []).filter(function (x) { return x.id === id; })[0];
@@ -4548,6 +4605,23 @@ function onAction(act, el) {
       };
       if (f) { const fr = new FileReader(); fr.onload = function () { go(String(fr.result || '')); }; fr.onerror = function () { toast('Could not read that file'); }; fr.readAsText(f); }
       else go(val('imptext'));
+      break;
+    }
+    case 'cc-check-open': ccCheckOpen(); break;
+    case 'cc-check-run': {
+      const f = $('#ccfile').files && $('#ccfile').files[0];
+      if (f) { const fr = new FileReader(); fr.onload = function () { ccCheckRun(String(fr.result || '')); }; fr.onerror = function () { toast('Could not read that file'); }; fr.readAsText(f); }
+      else if (val('cctext').trim()) ccCheckRun(val('cctext'));
+      else toast('Choose a file or paste some rows first');
+      break;
+    }
+    case 'cc-check-add': {
+      if (!CCK || !CCK.missing.length) break;
+      const card = ccCardName(), n = CCK.missing.length; const ids = [];
+      mutate(function () {
+        CCK.missing.forEach(function (r) { const nid = L.uid(); ids.push(nid); addTx({ id: nid, d: r.d, m: r.m, c: r.c, a: r.a, src: 'statement', card: card }); });
+      });
+      CCK = null; closeSheet(); render(); toast('Added ' + n + (n === 1 ? ' payment' : ' payments') + ' from your statement', undoImport(ids));
       break;
     }
     case 'taps-import': addTapsBulk(val('tapstext')); break;
