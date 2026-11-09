@@ -667,7 +667,7 @@ html.sky .hcard { background: radial-gradient(90% 70% at 100% 0%, color-mix(in s
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:29'; window.__BID__ = '2026-11-09 00:29:26';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 00:33'; window.__BID__ = '2026-11-09 00:33:58';</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -5471,6 +5471,20 @@ function tidyFour() {
   });
   if (n) setTimeout(function () { toast('BBma now matches your bank: \u20ac300, \u20ac150 and \u20ac45'); render(); }, 1300);
 }
+function tidyFive() {
+  if (demo || VIEWING || (S.profile.tidy || 0) >= 5) return;
+  let n = 0;
+  mutate(function () {
+    const k = '2026-11', arr = (S.months[k] = S.months[k] || []);
+    [50, 30].forEach(function (v) {
+      if (arr.some(function (t) { return t.d === '2026-11-05' && t.c === 'Family (BBma)' && Math.abs(t.a - v) < 0.01; })) return;
+      arr.push({ id: L.uid(), d: '2026-11-05', m: 'BBma', a: v, c: 'Family (BBma)', src: 'import' }); n++;
+    });
+    if (n) markMonth(k);
+    S.profile.tidy = 5; markProfile();
+  });
+  if (n) setTimeout(function () { toast('Added the BBma \u20ac50 and \u20ac30 from ABN'); render(); }, 1500);
+}
 async function boot() {
   const name = location.hash.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0) tab = name;
@@ -5480,7 +5494,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree(); tidyFour();
+  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree(); tidyFour(); tidyFive();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
