@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 19:28'; window.__BID__ = '2026-11-09 19:28:46';</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 19:34'; window.__BID__ = '2026-11-09 19:34:08'; window.__VER__ = 121; window.__NOTES__ = [{"v": 121, "date": "09 Nov", "title": "Update notices with version and details", "notes": ["The app now tells you when a new version is ready, even if you leave it open in the background", "The notice shows the version number and what changed", "Settings shows the version and the latest changes"]}, {"v": 120, "date": "09 Nov", "title": "Cents and bill accounts", "notes": ["Small amounts show cents everywhere, so Netflix is 15.99 in the calendar too", "Each bill can be taken from ING current or ABN bank"]}, {"v": 119, "date": "09 Nov", "title": "Readable Summary in daytime", "notes": ["Tinted cards so text stays clear on a bright Sky"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2130,7 +2130,7 @@ let saveTimer = null;
 function markProfile() { dirty.profile = true; sched(); }
 function markMonth(k) { dirty.months[k] = true; dirty.profile = true; sched(); }
 function sched() { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 350); setNote('Saving'); }
-function setNote(s) { saveNote = s; const el = $('#savenote'); if (el) el.textContent = (s ? s + ' \u00b7 ' : '') + (window.__BUILD__ ? 'v ' + window.__BUILD__ : ''); }
+function setNote(s) { saveNote = s; const el = $('#savenote'); if (el) el.textContent = (s ? s + ' \u00b7 ' : '') + (window.__BUILD__ ? 'v' + (window.__VER__ || '') + ' \u00b7 ' + window.__BUILD__ : ''); }
 async function flush() {
   if (VIEWING) { dirty.profile = false; dirty.months = {}; return; }
   if (saving) { sched(); return; }
@@ -3832,7 +3832,7 @@ function backupText() {
 function noteBackup() { try { localStorage.setItem(BK_KEY, L.today()); } catch (e) { /* ignore */ } updateBanner(); }
 function backupHTML() {
   const lb = lastBackup();
-  return '<section><p class="small muted" style="text-align:center">App version: ' + (window.__BUILD__ || 'Claude page') + '</p></section>' + '<section><h2>Backup</h2><div class="card pad stack">' +
+  return '<section><p class="small muted" style="text-align:center">App version: ' + (window.__VER__ ? window.__VER__ + ' \u00b7 ' : '') + (window.__BUILD__ || 'Claude page') + '</p>' + (window.__NOTES__ ? '<details class="card"><summary>What is new</summary><div class="body">' + window.__NOTES__.map(function (r) { return '<p><b>Version ' + r.v + ' &middot; ' + esc(r.date) + '</b><br>' + esc(r.title) + '</p><ul>' + r.notes.map(function (n) { return '<li class="small">' + esc(n) + '</li>'; }).join('') + '</ul>'; }).join('') + '</div></details>' : '') + '</section>' + '<section><h2>Backup</h2><div class="card pad stack">' +
     '<p class="small muted">' + (OFFLINE ? 'Your ledger is saved only on this phone. Make a backup now and then, so a lost phone or a deleted app does not take it with it.' : 'Copy your whole ledger as text. You can paste it into the offline copy of this app to move everything across.') + (lb ? ' Last backup: ' + L.dateLabel(lb) + ' ' + lb.slice(0, 4) + '.' : '') + '</p>' +
     '<div class="btns">' + (OFFLINE ? '<button class="btn" data-act="backup-share">Save backup file</button>' : '') + '<button class="btn ghost" data-act="backup-copy">Copy backup text</button><button class="btn ghost" data-act="export-csv">Export spreadsheet (CSV)</button></div></div></section>' + famHTML() +
     (S.profile.cardsTagged || demo ? '' : '<section><h2>Older entries</h2><div class="card pad stack"><p class="small muted">Your sheet listed which card paid for each entry. This adds those card names to your older entries, so the credit card totals include them.</p><div class="btns"><button class="btn" data-act="tag-cards">Add card names</button></div></div></section>') +
@@ -5556,15 +5556,20 @@ boot();
 <script>
 if ('serviceWorker' in navigator) { window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); }); }
 /* Look for a newer version and offer a one-tap update. Only caches are cleared, never your data. */
-window.addEventListener('load', function () {
-  setTimeout(function () {
-    if (!window.__BID__ || !navigator.onLine) return;
-    fetch('sw.js?cb=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (txt) {
-      const m = txt.match(/build (\S+ \S+)/);
-      if (!m || m[1] === window.__BID__) return;
+(function () {
+  let last = 0, shown = false;
+  function check() {
+    if (shown || !window.__BID__ || !navigator.onLine || Date.now() - last < 60000) return;
+    last = Date.now();
+    fetch('version.json?cb=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.bid || j.bid === window.__BID__ || shown) return;
+      shown = true;
       const b = document.createElement('div');
       b.id = 'updbar';
-      b.innerHTML = '<span>A new version is ready.</span><button id="updgo">Update now</button>';
+      b.style.cssText = 'flex-wrap:wrap;border-radius:22px';
+      const esc = function (x) { return String(x).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); };
+      b.innerHTML = '<span><b>Version ' + j.v + ' is ready</b><br><span style="opacity:.75;font-size:13px">' + esc(j.title || '') + '</span></span><button id="updgo">Update now</button>' +
+        '<details style="flex-basis:100%;font-size:13px"><summary style="cursor:pointer;opacity:.8">What changed</summary><ul style="margin:6px 0 0 18px;padding:0">' + (j.notes || []).map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></details>';
       document.body.appendChild(b);
       document.getElementById('updgo').onclick = function () {
         this.textContent = 'Updating...';
@@ -5573,8 +5578,13 @@ window.addEventListener('load', function () {
         (navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve()).then(clear).then(done, done);
       };
     }).catch(function () {});
-  }, 2500);
-});
+  }
+  window.addEventListener('load', function () { setTimeout(check, 2500); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+  window.addEventListener('focus', check);
+  window.addEventListener('online', check);
+  setInterval(check, 300000);
+})();
 </script>
 </body>
 </html>
