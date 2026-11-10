@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 19:34'; window.__BID__ = '2026-11-09 19:34:08'; window.__VER__ = 121; window.__NOTES__ = [{"v": 121, "date": "09 Nov", "title": "Update notices with version and details", "notes": ["The app now tells you when a new version is ready, even if you leave it open in the background", "The notice shows the version number and what changed", "Settings shows the version and the latest changes"]}, {"v": 120, "date": "09 Nov", "title": "Cents and bill accounts", "notes": ["Small amounts show cents everywhere, so Netflix is 15.99 in the calendar too", "Each bill can be taken from ING current or ABN bank"]}, {"v": 119, "date": "09 Nov", "title": "Readable Summary in daytime", "notes": ["Tinted cards so text stays clear on a bright Sky"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 20:54'; window.__BID__ = '2026-11-09 20:54:56'; window.__VER__ = 122; window.__NOTES__ = [{"v": 122, "date": "09 Nov", "title": "Mark a subscription as ended", "notes": ["Budget: tap Ended on a bill when you cancel it. It stops being taken off your budget", "Past payments stay in your history", "Ended bills are listed under Ended, with Bring back"]}, {"v": 121, "date": "09 Nov", "title": "Update notices with version and details", "notes": ["The app now tells you when a new version is ready, even if you leave it open in the background", "The notice shows the version number and what changed", "Settings shows the version and the latest changes"]}, {"v": 120, "date": "09 Nov", "title": "Cents and bill accounts", "notes": ["Small amounts show cents everywhere, so Netflix is 15.99 in the calendar too", "Each bill can be taken from ING current or ABN bank"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3541,8 +3541,9 @@ function billsHTML() {
     '<div class="note" style="margin-bottom:10px">Amount left looks wrong after changing days? <button class="link" data-act="bills-fix">Re-place all bill deductions</button></div>' +
     '<div class="card list">' + (bills.length ? bills.map(function (b) {
       return '<div class="brow"><div class="nm">' + catEmoji(b.cat) + ' ' + esc(b.name) + '</div><div class="ctl"><input type="number" inputmode="decimal" step="0.01" min="0" data-bind="bill" data-id="' + esc(b.id) + '" value="' + b.amount + '" aria-label="' + esc(b.name) + ' amount"></div>' +
-        '<div class="meta"><span>' + (b.cat === 'Transfer' ? 'Card payment, not counted' : esc(b.cat)) + ' &middot; day <input class="dayin" type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></span><button class="mini" data-act="del-bill" data-id="' + esc(b.id) + '">Remove</button></div></div>';
+        '<div class="meta"><span>' + (b.cat === 'Transfer' ? 'Card payment, not counted' : esc(b.cat)) + ' &middot; day <input class="dayin" type="number" inputmode="numeric" min="1" max="31" data-bind="billday" data-id="' + esc(b.id) + '" value="' + b.day + '" aria-label="Day of the month for ' + esc(b.name) + '"></span><button class="mini" data-act="end-bill" data-id="' + esc(b.id) + '">Ended</button> <button class="mini" data-act="del-bill" data-id="' + esc(b.id) + '">Remove</button></div></div>';
     }).join('') + '<div class="brow"><div class="nm">Total each month</div><div class="mono" style="text-align:right">' + money(total, true) + '</div></div>' : '<div class="empty">No bills yet. Add rent, insurance and subscriptions and they count toward your budget automatically each month.</div>') + '</div></section>' +
+    ((S.profile.endedBills || []).length ? '<section><h2>Ended</h2><div class="card list">' + (S.profile.endedBills || []).map(function (b, i) { return '<div class="brow"><div class="nm">' + catEmoji(b.cat) + ' ' + esc(b.name) + '<br><span class="muted small">' + money(b.amount) + ' a month &middot; ended ' + L.dateLabel(b.ended || L.today()) + '</span></div><div class="ctl"><button class="mini" data-act="unend-bill" data-i="' + i + '">Bring back</button></div></div>'; }).join('') + '</div><p class="small muted">Ended bills are not taken off your budget any more. Payments from before stay in your history.</p></section>' : '') +
     '<section><h2>One-off costs</h2><div class="card pad stack"><span class="small muted">Tap the categories that are one-off, like moving or a new couch. They still count in what you spent, but are left out of your typical month and the yearly pace.</span><div class="chips">' +
     L.catsOf(S.profile).map(function (c) { return '<button data-act="oneoff-toggle" data-cat="' + esc(c) + '" aria-pressed="' + !!(S.profile.oneoff || {})[c] + '">' + ce(c) + '</button>'; }).join('') + '</div></div></section>' +
     '<section><div class="sec-head"><h2>Your categories</h2><button class="link" data-act="new-cat">Add category</button></div><div class="card attn">' +
@@ -4497,6 +4498,24 @@ function onAction(act, el) {
       if (!name || isNaN(amt) || amt <= 0) { toast('Give the bill a name and an amount'); break; }
       mutate(function () { (S.profile.bills = S.profile.bills || []).push({ id: L.uid(), name: name, cat: cat, amount: amt, day: day }); markProfile(); ensureBills(); });
       closeSheet(); render(); toast('Bill added'); break;
+    }
+    case 'end-bill': {
+      const b0 = (S.profile.bills || []).filter(function (b) { return b.id === el.dataset.id; })[0];
+      if (!b0) break;
+      mutate(function () {
+        const e = Object.assign({}, b0, { ended: L.today() });
+        S.profile.bills = (S.profile.bills || []).filter(function (b) { return b.id !== b0.id; });
+        (S.profile.endedBills = S.profile.endedBills || []).push(e);
+        const today = L.today();
+        Object.keys(S.months).forEach(function (k) { const arr = S.months[k]; if (!Array.isArray(arr)) return; const keep = arr.filter(function (t) { return !(t.bid === b0.id && t.src === 'bill' && t.d > today); }); if (keep.length !== arr.length) { S.months[k] = keep; markMonth(k); } });
+        markProfile();
+      });
+      render(); toast(b0.name + ' marked as ended', function () { mutate(function () { S.profile.endedBills = (S.profile.endedBills || []).filter(function (x) { return x.id !== b0.id; }); S.profile.bills = (S.profile.bills || []).concat([b0]); markProfile(); }); render(); toast('Back on'); }); break;
+    }
+    case 'unend-bill': {
+      const i = Number(el.dataset.i), e = (S.profile.endedBills || [])[i]; if (!e) break;
+      mutate(function () { const b = Object.assign({}, e); delete b.ended; S.profile.endedBills.splice(i, 1); (S.profile.bills = S.profile.bills || []).push(b); markProfile(); });
+      render(); toast(e.name + ' is back in your bills'); break;
     }
     case 'del-bill':
       mutate(function () {
