@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '09 Nov 20:54'; window.__BID__ = '2026-11-09 20:54:56'; window.__VER__ = 122; window.__NOTES__ = [{"v": 122, "date": "09 Nov", "title": "Mark a subscription as ended", "notes": ["Budget: tap Ended on a bill when you cancel it. It stops being taken off your budget", "Past payments stay in your history", "Ended bills are listed under Ended, with Bring back"]}, {"v": 121, "date": "09 Nov", "title": "Update notices with version and details", "notes": ["The app now tells you when a new version is ready, even if you leave it open in the background", "The notice shows the version number and what changed", "Settings shows the version and the latest changes"]}, {"v": 120, "date": "09 Nov", "title": "Cents and bill accounts", "notes": ["Small amounts show cents everywhere, so Netflix is 15.99 in the calendar too", "Each bill can be taken from ING current or ABN bank"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '14 Nov 09:03'; window.__BID__ = '2026-11-14 09:03:21'; window.__VER__ = 123; window.__NOTES__ = [{"v": 123, "date": "14 Nov", "title": "Trips no longer stay open by accident", "notes": ["One USD charge at home (for example a USD subscription) used to start a trip that stayed open and picked up later spending", "Automatic trips now close by themselves and only run while you keep paying in that currency", "Trips that were still open this way are closed on update, and later entries go back to normal spending"]}, {"v": 122, "date": "09 Nov", "title": "Mark a subscription as ended", "notes": ["Budget: tap Ended on a bill when you cancel it. It stops being taken off your budget", "Past payments stay in your history", "Ended bills are listed under Ended, with Bring back"]}, {"v": 121, "date": "09 Nov", "title": "Update notices with version and details", "notes": ["The app now tells you when a new version is ready, even if you leave it open in the background", "The notice shows the version number and what changed", "Settings shows the version and the latest changes"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2364,8 +2364,8 @@ function rateFor(cur, trip) {
   return fx && fx.cur === cur && fx.rate > 0 ? fx.rate : 0;
 }
 function newTrip(cur, date) {
-  const recent = L.daysBetween(date, L.today()) <= 2;
-  const t = { id: L.uid(), name: cur + ' trip, ' + L.monthLabel(L.monthKey(date)), cur: cur, start: date, end: recent ? null : date, perDiem: 0, rate: rateFor(cur, null) };
+  /* An automatic trip only lasts as long as you keep paying in that currency (end moves forward with each purchase), so one dollar charge at home can never leave a trip open. */
+  const t = { id: L.uid(), name: cur + ' trip, ' + L.monthLabel(L.monthKey(date)), cur: cur, start: date, end: date, auto: true, perDiem: 0, rate: rateFor(cur, null) };
   (S.profile.trips = S.profile.trips || []).push(t);
   markProfile();
   return t;
@@ -2373,7 +2373,12 @@ function newTrip(cur, date) {
 function tripFields(amount, cur, date, spend) {
   const home = S.profile.currency;
   if (!cur || cur === home) return { a: Math.round(amount * 100) / 100 };
-  const trip = L.tripFor(S.profile, date, cur) || newTrip(cur, date);
+  let trip = L.tripFor(S.profile, date, cur);
+  if (!trip) {
+    trip = (S.profile.trips || []).filter(function (x) { return x.auto && x.cur === cur && x.end && L.daysBetween(x.end, date) >= 0 && L.daysBetween(x.end, date) <= 1; })[0];
+    if (trip) { trip.end = date; markProfile(); }
+  }
+  if (!trip) trip = newTrip(cur, date);
   const rate = rateFor(cur, trip);
   if (!(rate > 0)) return { a: Math.round(amount * 100) / 100, needRate: true };
   if (!trip.rate) { trip.rate = rate; markProfile(); }
@@ -5551,6 +5556,21 @@ function tidyFive() {
   });
   if (n) setTimeout(function () { toast('Added the BBma \u20ac50 and \u20ac30 from ABN'); render(); }, 1500);
 }
+function tidySix() {
+  if (demo || VIEWING || (S.profile.tidy || 0) >= 6) return;
+  let n = 0;
+  mutate(function () {
+    (S.profile.trips || []).forEach(function (tr) {
+      if (tr.end || !/^[A-Z]{3} trip, /.test(tr.name || '')) return;
+      let last = tr.start;
+      Object.keys(S.months).forEach(function (k) { (S.months[k] || []).forEach(function (t) { if (t.tr === tr.id && t.oc === tr.cur && t.d > last) last = t.d; }); });
+      tr.end = last; tr.auto = true; n++;
+    });
+    if (n) syncAll();
+    S.profile.tidy = 6; markProfile();
+  });
+  if (n) setTimeout(function () { toast('Closed ' + n + ' automatic trip' + (n > 1 ? 's' : '') + ' that were still open. Entries after them are normal spending again.'); render(); }, 1700);
+}
 async function boot() {
   const name = location.hash.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0) tab = name;
@@ -5560,7 +5580,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree(); tidyFour(); tidyFive();
+  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree(); tidyFour(); tidyFive(); tidySix();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
