@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '14 Nov 09:10'; window.__BID__ = '2026-11-14 09:10:35'; window.__VER__ = 124; window.__NOTES__ = [{"v": 124, "date": "14 Nov", "title": "Easier to see and end an open trip", "notes": ["Each trip now shows Open since (date) or Ended (dates) right under its name", "End trip is now at the top of an open trip, next to Edit", "Entries dated after you end a trip go back to normal spending"]}, {"v": 123, "date": "14 Nov", "title": "Trips no longer stay open by accident", "notes": ["One USD charge at home (for example a USD subscription) used to start a trip that stayed open and picked up later spending", "Automatic trips now close by themselves and only run while you keep paying in that currency", "Trips that were still open this way are closed on update, and later entries go back to normal spending"]}, {"v": 122, "date": "09 Nov", "title": "Mark a subscription as ended", "notes": ["Budget: tap Ended on a bill when you cancel it. It stops being taken off your budget", "Past payments stay in your history", "Ended bills are listed under Ended, with Bring back"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '15 Nov 11:04'; window.__BID__ = '2026-11-15 11:04:32'; window.__VER__ = 125; window.__NOTES__ = [{"v": 125, "date": "15 Nov", "title": "ABN debit card entries tidied", "notes": ["Entries paid with the ABN AMRO Betaalpas now say ABN AMRO bank account, so they count in My accounts"]}, {"v": 124, "date": "14 Nov", "title": "Easier to see and end an open trip", "notes": ["Each trip now shows Open since (date) or Ended (dates) right under its name", "End trip is now at the top of an open trip, next to Edit", "Entries dated after you end a trip go back to normal spending"]}, {"v": 123, "date": "14 Nov", "title": "Trips no longer stay open by accident", "notes": ["One USD charge at home (for example a USD subscription) used to start a trip that stayed open and picked up later spending", "Automatic trips now close by themselves and only run while you keep paying in that currency", "Trips that were still open this way are closed on update, and later entries go back to normal spending"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -5572,6 +5572,18 @@ function tidySix() {
   });
   if (n) setTimeout(function () { toast('Closed ' + n + ' automatic trip' + (n > 1 ? 's' : '') + ' that were still open. Entries after them are normal spending again.'); render(); }, 1700);
 }
+function tidySeven() {
+  if (demo || VIEWING || (S.profile.tidy || 0) >= 7) return;
+  let n = 0;
+  mutate(function () {
+    Object.keys(S.months).forEach(function (k) {
+      const arr = S.months[k]; if (!Array.isArray(arr)) return;
+      arr.forEach(function (t) { if (t.card && /^abn( amro)? (betaalpas|debit( card)?|bank( account)?)$/i.test(String(t.card).trim()) && t.card !== 'ABN AMRO bank') { t.card = 'ABN AMRO bank'; n++; markMonth(k); } });
+    });
+    S.profile.tidy = 7; markProfile();
+  });
+  if (n) setTimeout(function () { toast(n + ' entries with the ABN AMRO Betaalpas now say ABN AMRO bank account'); render(); }, 1900);
+}
 async function boot() {
   const name = location.hash.replace(/^#/, '');
   if (TABS.indexOf(name) >= 0) tab = name;
@@ -5581,7 +5593,7 @@ async function boot() {
   loaded = true;
   if (OFFLINE) { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* ignore */ } }
   applyPeriod(); viewKey = NOW_KEY;
-  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree(); tidyFour(); tidyFive(); tidySix();
+  repairBills(); splitRent(); ensureBills(); ensureEvents(); fixSavingsMoves(); tidyOnce(); tidyTwo(); tidyThree(); tidyFour(); tidyFive(); tidySix(); tidySeven();
   if (!demo) syncAll();
   setNote(Store.mode === 'db' ? 'Saved' : saveNote || '');
   render();
