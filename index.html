@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:52'; window.__BID__ = '2026-11-16 04:52:09'; window.__VER__ = 130; window.__NOTES__ = [{"v": 130, "date": "16 Nov", "title": "Splitting money is easier", "notes": ["In the split sheet, the box that starts full now shrinks by itself as you type amounts in the other boxes", "So you no longer get 'That is more than' when moving money to other accounts"]}, {"v": 129, "date": "16 Nov", "title": "Use received money to pay the credit card bill", "notes": ["When you tap Received on expected money, per diem left or allowance, a new field lets you say how much was used to pay the credit card bill", "That amount is recorded as a credit card payment", "The rest can still go to savings accounts"]}, {"v": 128, "date": "16 Nov", "title": "Split per diem and allowance over savings accounts", "notes": ["Moving per diem left to savings: split it over any savings accounts, or create a new one", "Allowance received: optionally put part straight into savings accounts", "Amounts you do not place stay as normal money"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:55'; window.__BID__ = '2026-11-16 04:55:01'; window.__VER__ = 131; window.__NOTES__ = [{"v": 131, "date": "16 Nov", "title": "Move money between savings pots", "notes": ["Each pot has a new Move to another pot button", "Pick the other pot, the amount and the date. Both pots show it in their history"]}, {"v": 130, "date": "16 Nov", "title": "Splitting money is easier", "notes": ["In the split sheet, the box that starts full now shrinks by itself as you type amounts in the other boxes", "So you no longer get 'That is more than' when moving money to other accounts"]}, {"v": 129, "date": "16 Nov", "title": "Use received money to pay the credit card bill", "notes": ["When you tap Received on expected money, per diem left or allowance, a new field lets you say how much was used to pay the credit card bill", "That amount is recorded as a credit card payment", "The rest can still go to savings accounts"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3705,7 +3705,7 @@ function savingsHTML() {
     const log = (g.log || []).slice().sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
     return '<div class="goal" style="--h:' + hueOfName(g.name) + '"><div class="top-row"><span class="nm">' + esc(g.name) + '</span><span class="mono" style="font-size:20px">' + money(g.saved, true) + '</span></div>' +
       (g.target > 0 ? bar(pct(g.saved, g.target), 'good') + '<div class="top-row"><span class="mono small">' + Math.round(pct(g.saved, g.target)) + '% of ' + money(g.target) + '</span><span class="muted small">' + goalProgress(g) + '</span></div>' : '') +
-      '<div class="btns"><button class="btn sm" data-act="deposit" data-id="' + esc(g.id) + '">Add or withdraw</button><button class="btn sm ghost" data-act="edit-goal" data-id="' + esc(g.id) + '">Edit</button></div>' +
+      '<div class="btns"><button class="btn sm" data-act="deposit" data-id="' + esc(g.id) + '">Add or withdraw</button><button class="btn sm ghost" data-act="xfer" data-id="' + esc(g.id) + '">Move to another pot</button><button class="btn sm ghost" data-act="edit-goal" data-id="' + esc(g.id) + '">Edit</button></div>' +
       (log.length ? '<details><summary class="small muted" style="cursor:pointer">History (' + log.length + ')</summary><div class="list" style="margin-top:6px">' + log.slice(0, 30).map(function (e) {
         return '<div class="tx" style="padding:8px 0;min-height:0"><span class="tx-main"><span class="tx-m">' + esc(e.n || (e.a > 0 ? 'Added' : 'Withdrawn')) + '</span><span class="tx-sub">' + L.dateLabel(e.d) + '</span></span><span class="amt mono' + (e.a > 0 ? ' pos' : '') + '">' + (e.a > 0 ? '+' : '') + money(e.a, true) + '</span></div>';
       }).join('') + '</div></details>' : '') + '</div>';
@@ -3735,7 +3735,7 @@ function savingsHTML_old() {
       return '<div class="goal" style="--h:' + hueOfName(g.name) + '"><div class="top-row"><span class="nm">' + esc(g.name) + '</span><span class="mono small">' + Math.round(pct(g.saved, g.target)) + '%</span></div>' +
         bar(pct(g.saved, g.target), 'good') +
         '<div class="top-row"><span class="mono small"><b>' + money(g.saved) + '</b> of ' + money(g.target) + '</span><span class="muted small">' + goalProgress(g) + '</span></div>' +
-        '<div class="btns"><button class="btn sm" data-act="deposit" data-id="' + esc(g.id) + '">Add money</button><button class="btn sm ghost" data-act="edit-goal" data-id="' + esc(g.id) + '">Edit</button></div></div>';
+        '<div class="btns"><button class="btn sm" data-act="deposit" data-id="' + esc(g.id) + '">Add money</button><button class="btn sm ghost" data-act="xfer" data-id="' + esc(g.id) + '">Move to another pot</button><button class="btn sm ghost" data-act="edit-goal" data-id="' + esc(g.id) + '">Edit</button></div></div>';
     }).join('') + '</div>' : '<div class="card empty">No goals yet. Tap New goal to start one.</div>') + '</section>' +
     (log.length ? '<section><h2>Recent deposits</h2><div class="card list">' + log.slice(0, 8).map(function (e) {
       return '<div class="tx"><span class="tx-main"><span class="tx-m">' + esc(e.n) + '</span><span class="tx-sub">' + L.dateLabel(e.d) + '</span></span><span class="amt mono' + (e.a > 0 ? ' pos' : '') + '">' + (e.a > 0 ? '+' : '') + money(e.a, true) + '</span></div>';
@@ -4290,6 +4290,16 @@ function moveSheet(tripId) {
     '<div class="btns"><button class="btn" data-act="save-move" data-id="' + esc(tripId) + '">Move</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
   wireSplit(function () { return left; });
 }
+function xferSheet(id) {
+  const gs = S.profile.goals || [], g = gs.filter(function (x) { return x.id === id; })[0];
+  if (!g) return;
+  const others = gs.filter(function (x) { return x.id !== id; });
+  if (!others.length) { toast('Add a second pot first'); return; }
+  openSheet('<h3>Move money from ' + esc(g.name) + '</h3><div class="stack"><p class="small muted">' + esc(g.name) + ' has ' + money(g.saved, true) + '.</p>' +
+    '<label>Move to<select id="x-to">' + others.map(function (o) { return '<option value="' + esc(o.id) + '">' + esc(o.name) + ' (now ' + money(o.saved, true) + ')</option>'; }).join('') + '</select></label>' +
+    '<div class="grid2"><label>Amount<input id="x-a" type="number" inputmode="decimal" step="0.01" min="0"></label><label>Date<input id="x-d" type="date" value="' + L.today() + '"></label></div>' +
+    '<div class="btns"><button class="btn" data-act="xfer-go" data-id="' + esc(id) + '">Move</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+}
 function depositSheet(id) {
   const g = (S.profile.goals || []).filter(function (x) { return x.id === id; })[0];
   if (!g) return;
@@ -4705,6 +4715,19 @@ function onAction(act, el) {
     case 'new-goal': goalSheet(null); break;
     case 'edit-goal': goalSheet(el.dataset.id); break;
     case 'deposit': depositSheet(el.dataset.id); break;
+    case 'xfer': xferSheet(el.dataset.id); break;
+    case 'xfer-go': {
+      const v = numval('x-a'), d = val('x-d') || L.today(), gs = S.profile.goals || [];
+      const f = gs.filter(function (x) { return x.id === el.dataset.id; })[0], t = gs.filter(function (x) { return x.id === val('x-to'); })[0];
+      if (!f || !t) break;
+      if (isNaN(v) || v <= 0) { toast('Enter an amount'); break; }
+      mutate(function () {
+        f.saved = Math.round((f.saved - v) * 100) / 100; t.saved = Math.round((t.saved + v) * 100) / 100;
+        (f.log = f.log || []).push({ d: d, a: -v, n: 'Moved to ' + t.name }); (t.log = t.log || []).push({ d: d, a: v, n: 'Moved from ' + f.name });
+        markProfile();
+      });
+      closeSheet(); render(); toast('Moved ' + money(v, true) + ' to ' + t.name); break;
+    }
     case 'new-owed': if ((S.profile.goals || []).length) owedSheet(); else toast('Create a savings pot first'); break;
     case 'save-owed': {
       const name = val('o-n').trim(), a = numval('o-a');
