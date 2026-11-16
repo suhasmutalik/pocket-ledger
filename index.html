@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '15 Nov 11:04'; window.__BID__ = '2026-11-15 11:04:32'; window.__VER__ = 125; window.__NOTES__ = [{"v": 125, "date": "15 Nov", "title": "ABN debit card entries tidied", "notes": ["Entries paid with the ABN AMRO Betaalpas now say ABN AMRO bank account, so they count in My accounts"]}, {"v": 124, "date": "14 Nov", "title": "Easier to see and end an open trip", "notes": ["Each trip now shows Open since (date) or Ended (dates) right under its name", "End trip is now at the top of an open trip, next to Edit", "Entries dated after you end a trip go back to normal spending"]}, {"v": 123, "date": "14 Nov", "title": "Trips no longer stay open by accident", "notes": ["One USD charge at home (for example a USD subscription) used to start a trip that stayed open and picked up later spending", "Automatic trips now close by themselves and only run while you keep paying in that currency", "Trips that were still open this way are closed on update, and later entries go back to normal spending"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:32'; window.__BID__ = '2026-11-16 04:32:32'; window.__VER__ = 126; window.__NOTES__ = [{"v": 126, "date": "16 Nov", "title": "Edit or delete expected money", "notes": ["Savings: every item under Money you are expecting now has an Edit button", "For money someone owes you, Edit lets you change the amount or delete it", "For per diem and allowance, Edit opens the trip, where you change the per diem or allowance amount"]}, {"v": 125, "date": "15 Nov", "title": "ABN debit card entries tidied", "notes": ["Entries paid with the ABN AMRO Betaalpas now say ABN AMRO bank account, so they count in My accounts"]}, {"v": 124, "date": "14 Nov", "title": "Easier to see and end an open trip", "notes": ["Each trip now shows Open since (date) or Ended (dates) right under its name", "End trip is now at the top of an open trip, next to Edit", "Entries dated after you end a trip go back to normal spending"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3714,7 +3714,7 @@ function savingsHTML() {
     (gs.length ? '<div class="card list">' + gs.map(potCard).join('') + '</div>' : '<div class="card empty">No savings yet. Tap New pot to start one.</div>') + '</section>' +
     '<section><div class="sec-head"><h2>Money you are expecting</h2><button class="link" data-act="new-owed">Add</button></div>' +
     '<div class="card list">' + (exp.rows.length ? exp.rows.map(function (r) {
-      return '<div class="tx"><span class="tx-main"><span class="tx-m">' + esc(r.name) + '</span><span class="tx-sub">' + esc(r.who || '') + (r.pot ? ' &middot; into ' + esc(potName(r.pot)) : '') + '</span></span><span style="display:flex;gap:10px;align-items:center"><span class="amt mono pos">+' + money(r.amount, true) + '</span><button class="btn sm ghost" data-act="' + (r.kind === 'owed' ? 'owed-got' : r.kind === 'allow' ? 'al-open' : 'pd-got') + '" data-id="' + esc(r.id) + '">Received</button></span></div>';
+      return '<div class="tx"><span class="tx-main"><span class="tx-m">' + esc(r.name) + '</span><span class="tx-sub">' + esc(r.who || '') + (r.pot ? ' &middot; into ' + esc(potName(r.pot)) : '') + '</span></span><span style="display:flex;gap:10px;align-items:center"><span class="amt mono pos">+' + money(r.amount, true) + '</span><button class="btn sm ghost" data-act="' + (r.kind === 'owed' ? 'owed-edit' : 'edit-trip') + '" data-id="' + esc(r.id) + '">Edit</button><button class="btn sm ghost" data-act="' + (r.kind === 'owed' ? 'owed-got' : r.kind === 'allow' ? 'al-open' : 'pd-got') + '" data-id="' + esc(r.id) + '">Received</button></span></div>';
     }).join('') : '<div class="empty">Nothing expected. Add money someone owes you, like a returned advance.</div>') + '</div>' +
     (got.length ? '<p class="small muted" style="margin-top:8px">Received recently: ' + got.map(function (o) { return esc(o.name) + ' ' + money(o.amount); }).join(', ') + '</p>' : '') + '</section>' +
     '<section><p class="muted small">Expected money is not counted in your spending or your savings until you tap Received. Per diem comes from your trips.</p></section>';
@@ -4222,12 +4222,13 @@ function goalSheet(id) {
     '<div class="grid2"><label>Planned per month<input id="g-m" type="number" inputmode="decimal" min="0" step="10" value="' + (g ? g.monthly : '') + '"></label><label>Want it by (optional)<input id="g-b" type="date" value="' + (g && g.by ? g.by : '') + '"></label></div>' +
     '<div class="btns"><button class="btn" data-act="save-goal" data-id="' + esc(id || '') + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (g ? '<button class="btn danger" data-act="del-goal" data-id="' + esc(id) + '">Delete</button>' : '') + '</div></div>');
 }
-function owedSheet() {
+function owedSheet(id) {
   const gs = S.profile.goals || [];
-  openSheet('<h3>Money you are expecting</h3><div class="stack"><label>What for<input id="o-n" type="text" placeholder="House advance back"></label>' +
-    '<div class="grid2"><label>From<input id="o-w" type="text" placeholder="Landlord"></label><label>Amount<input id="o-a" type="number" inputmode="decimal" step="0.01" min="0"></label></div>' +
-    '<label>Goes into<select id="o-p">' + gs.map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'; }).join('') + '</select></label>' +
-    '<div class="btns"><button class="btn" data-act="save-owed">Add</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+  const o = id ? (S.profile.owed || []).filter(function (x) { return x.id === id; })[0] : null;
+  openSheet('<h3>' + (o ? 'Change expected money' : 'Money you are expecting') + '</h3><div class="stack"><label>What for<input id="o-n" type="text" value="' + esc(o ? o.name : '') + '" placeholder="House advance back"></label>' +
+    '<div class="grid2"><label>From<input id="o-w" type="text" value="' + esc(o ? o.who || '' : '') + '" placeholder="Landlord"></label><label>Amount<input id="o-a" type="number" inputmode="decimal" step="0.01" min="0" value="' + (o ? o.amount : '') + '"></label></div>' +
+    '<label>Goes into<select id="o-p">' + gs.map(function (g) { return '<option value="' + esc(g.id) + '"' + (o && o.pot === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') + '</select></label>' +
+    '<div class="btns"><button class="btn" data-act="save-owed" data-id="' + esc(o ? o.id : '') + '">' + (o ? 'Save' : 'Add') + '</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (o ? '<button class="btn danger" data-act="del-owed" data-id="' + esc(o.id) + '">Delete</button>' : '') + '</div></div>');
 }
 function moveSheet(tripId) {
   const t = (S.profile.trips || []).filter(function (x) { return x.id === tripId; })[0];
@@ -4659,8 +4660,19 @@ function onAction(act, el) {
     case 'save-owed': {
       const name = val('o-n').trim(), a = numval('o-a');
       if (!name || isNaN(a) || a <= 0) { toast('Enter what it is for and an amount'); break; }
-      mutate(function () { (S.profile.owed = S.profile.owed || []).push({ id: L.uid(), name: name, who: val('o-w').trim(), amount: a, pot: val('o-p'), got: '' }); markProfile(); });
-      closeSheet(); render(); toast('Added to expected money'); break;
+      const eid = el.dataset.id;
+      mutate(function () {
+        const l = S.profile.owed = S.profile.owed || [], ex = eid ? l.filter(function (x) { return x.id === eid; })[0] : null;
+        if (ex) { ex.name = name; ex.who = val('o-w').trim(); ex.amount = a; ex.pot = val('o-p'); } else l.push({ id: L.uid(), name: name, who: val('o-w').trim(), amount: a, pot: val('o-p'), got: '' });
+        markProfile();
+      });
+      closeSheet(); render(); toast(eid ? 'Saved' : 'Added to expected money'); break;
+    }
+    case 'owed-edit': owedSheet(el.dataset.id); break;
+    case 'del-owed': {
+      const gone = (S.profile.owed || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+      mutate(function () { S.profile.owed = (S.profile.owed || []).filter(function (x) { return x.id !== el.dataset.id; }); markProfile(); });
+      closeSheet(); render(); toast('Deleted', gone ? function () { mutate(function () { (S.profile.owed = S.profile.owed || []).push(gone); markProfile(); }); render(); toast('Put back'); } : null); break;
     }
     case 'owed-got':
       mutate(function () {

@@ -1,1 +1,1 @@
-{"bid": "2026-11-15 11:04:32", "v": 125, "title": "ABN debit card entries tidied", "notes": ["Entries paid with the ABN AMRO Betaalpas now say ABN AMRO bank account, so they count in My accounts"]}
+{"bid": "2026-11-16 04:32:32", "v": 126, "title": "Edit or delete expected money", "notes": ["Savings: every item under Money you are expecting now has an Edit button", "For money someone owes you, Edit lets you change the amount or delete it", "For per diem and allowance, Edit opens the trip, where you change the per diem or allowance amount"]}
