@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:48'; window.__BID__ = '2026-11-16 04:48:21'; window.__VER__ = 129; window.__NOTES__ = [{"v": 129, "date": "16 Nov", "title": "Use received money to pay the credit card bill", "notes": ["When you tap Received on expected money, per diem left or allowance, a new field lets you say how much was used to pay the credit card bill", "That amount is recorded as a credit card payment", "The rest can still go to savings accounts"]}, {"v": 128, "date": "16 Nov", "title": "Split per diem and allowance over savings accounts", "notes": ["Moving per diem left to savings: split it over any savings accounts, or create a new one", "Allowance received: optionally put part straight into savings accounts", "Amounts you do not place stay as normal money"]}, {"v": 127, "date": "16 Nov", "title": "Split expected money over savings accounts", "notes": ["Received on expected money now asks where it goes: put any amount in each savings account", "You can create a new savings account right there", "Amounts you do not place stay as normal money"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:52'; window.__BID__ = '2026-11-16 04:52:09'; window.__VER__ = 130; window.__NOTES__ = [{"v": 130, "date": "16 Nov", "title": "Splitting money is easier", "notes": ["In the split sheet, the box that starts full now shrinks by itself as you type amounts in the other boxes", "So you no longer get 'That is more than' when moving money to other accounts"]}, {"v": 129, "date": "16 Nov", "title": "Use received money to pay the credit card bill", "notes": ["When you tap Received on expected money, per diem left or allowance, a new field lets you say how much was used to pay the credit card bill", "That amount is recorded as a credit card payment", "The rest can still go to savings accounts"]}, {"v": 128, "date": "16 Nov", "title": "Split per diem and allowance over savings accounts", "notes": ["Moving per diem left to savings: split it over any savings accounts, or create a new one", "Allowance received: optionally put part straight into savings accounts", "Amounts you do not place stay as normal money"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4234,7 +4234,16 @@ function splitFieldsHTML(def) {
 }
 function wireSplit(getTotal) {
   const upd = function () { let t = 0; document.querySelectorAll('[data-sp]').forEach(function (i) { t += parseFloat(i.value) || 0; }); const l = Math.round((getTotal() - t) * 100) / 100; const e = document.getElementById('sp-left'); if (e) e.textContent = l > 0.004 ? money(l, true) + ' stays as normal money.' : (l < -0.004 ? 'Too much by ' + money(-l, true) : 'All placed.'); };
-  document.querySelectorAll('[data-sp],#al-amt').forEach(function (i) { i.addEventListener('input', upd); }); upd();
+  const auto = Array.prototype.filter.call(document.querySelectorAll('[data-sp]'), function (i) { return i.id !== 'sp-cc' && i.id !== 'sp-new-a' && i.value !== ''; })[0];
+  document.querySelectorAll('[data-sp],#al-amt').forEach(function (i) {
+    i.addEventListener('input', function () {
+      if (auto && i !== auto && i.id !== 'al-amt') {
+        let o = 0; document.querySelectorAll('[data-sp]').forEach(function (x) { if (x !== auto) o += parseFloat(x.value) || 0; });
+        const r = Math.round((getTotal() - o) * 100) / 100; auto.value = r > 0.004 ? r : '';
+      }
+      upd();
+    });
+  }); upd();
 }
 /* reads the split fields; returns null (after a message) when they do not add up */
 function readSplit(total) {
