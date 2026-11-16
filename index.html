@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:32'; window.__BID__ = '2026-11-16 04:32:32'; window.__VER__ = 126; window.__NOTES__ = [{"v": 126, "date": "16 Nov", "title": "Edit or delete expected money", "notes": ["Savings: every item under Money you are expecting now has an Edit button", "For money someone owes you, Edit lets you change the amount or delete it", "For per diem and allowance, Edit opens the trip, where you change the per diem or allowance amount"]}, {"v": 125, "date": "15 Nov", "title": "ABN debit card entries tidied", "notes": ["Entries paid with the ABN AMRO Betaalpas now say ABN AMRO bank account, so they count in My accounts"]}, {"v": 124, "date": "14 Nov", "title": "Easier to see and end an open trip", "notes": ["Each trip now shows Open since (date) or Ended (dates) right under its name", "End trip is now at the top of an open trip, next to Edit", "Entries dated after you end a trip go back to normal spending"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:38'; window.__BID__ = '2026-11-16 04:38:23'; window.__VER__ = 127; window.__NOTES__ = [{"v": 127, "date": "16 Nov", "title": "Split expected money over savings accounts", "notes": ["Received on expected money now asks where it goes: put any amount in each savings account", "You can create a new savings account right there", "Amounts you do not place stay as normal money"]}, {"v": 126, "date": "16 Nov", "title": "Edit or delete expected money", "notes": ["Savings: every item under Money you are expecting now has an Edit button", "For money someone owes you, Edit lets you change the amount or delete it", "For per diem and allowance, Edit opens the trip, where you change the per diem or allowance amount"]}, {"v": 125, "date": "15 Nov", "title": "ABN debit card entries tidied", "notes": ["Entries paid with the ABN AMRO Betaalpas now say ABN AMRO bank account, so they count in My accounts"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4222,6 +4222,17 @@ function goalSheet(id) {
     '<div class="grid2"><label>Planned per month<input id="g-m" type="number" inputmode="decimal" min="0" step="10" value="' + (g ? g.monthly : '') + '"></label><label>Want it by (optional)<input id="g-b" type="date" value="' + (g && g.by ? g.by : '') + '"></label></div>' +
     '<div class="btns"><button class="btn" data-act="save-goal" data-id="' + esc(id || '') + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (g ? '<button class="btn danger" data-act="del-goal" data-id="' + esc(id) + '">Delete</button>' : '') + '</div></div>');
 }
+function splitSheet(id) {
+  const o = (S.profile.owed || []).filter(function (x) { return x.id === id; })[0]; if (!o) return;
+  const gs = S.profile.goals || [];
+  openSheet('<h3>Where does ' + money(o.amount, true) + ' go?</h3><div class="stack"><p class="small muted">' + esc(o.name) + '. Split it over your savings accounts as you like.</p>' +
+    gs.map(function (g, i) { return '<label>' + esc(g.name) + ' <span class="muted small">(now ' + money(g.saved) + ')</span><input id="sp-' + i + '" data-sp type="number" inputmode="decimal" step="0.01" min="0" value="' + (g.id === o.pot || (!gs.some(function (x) { return x.id === o.pot; }) && i === 0) ? o.amount : '') + '" placeholder="0"></label>'; }).join('') +
+    '<label>Or a new savings account<input id="sp-new-n" type="text" placeholder="Name, for example ABN savings"></label><label>Amount for the new account<input id="sp-new-a" data-sp type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></label>' +
+    '<p class="small muted" id="sp-left"></p>' +
+    '<div class="btns"><button class="btn" data-act="owed-split-go" data-id="' + esc(o.id) + '">Received</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+  const upd = function () { let t = 0; document.querySelectorAll('[data-sp]').forEach(function (i) { t += parseFloat(i.value) || 0; }); const l = Math.round((o.amount - t) * 100) / 100; const e = document.getElementById('sp-left'); if (e) e.textContent = l > 0.004 ? money(l, true) + ' not placed. It stays as normal money.' : (l < -0.004 ? 'Too much by ' + money(-l, true) : 'All placed.'); };
+  document.querySelectorAll('[data-sp]').forEach(function (i) { i.addEventListener('input', upd); }); upd();
+}
 function owedSheet(id) {
   const gs = S.profile.goals || [];
   const o = id ? (S.profile.owed || []).filter(function (x) { return x.id === id; })[0] : null;
@@ -4674,7 +4685,24 @@ function onAction(act, el) {
       mutate(function () { S.profile.owed = (S.profile.owed || []).filter(function (x) { return x.id !== el.dataset.id; }); markProfile(); });
       closeSheet(); render(); toast('Deleted', gone ? function () { mutate(function () { (S.profile.owed = S.profile.owed || []).push(gone); markProfile(); }); render(); toast('Put back'); } : null); break;
     }
-    case 'owed-got':
+    case 'owed-got': splitSheet(el.dataset.id); break;
+    case 'owed-split-go': {
+      const o = (S.profile.owed || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (!o || o.got) break;
+      const gs = S.profile.goals || [], parts = [];
+      gs.forEach(function (g, i) { const v = parseFloat((document.getElementById('sp-' + i) || {}).value) || 0; if (v > 0) parts.push({ g: g, v: v }); });
+      const nn = val('sp-new-n').trim(), na = parseFloat(val('sp-new-a')) || 0;
+      const tot = parts.reduce(function (t, x) { return t + x.v; }, 0) + (nn ? na : 0);
+      if (tot > o.amount + 0.005) { toast('That is more than ' + money(o.amount, true)); break; }
+      if (!nn && na > 0) { toast('Give the new account a name'); break; }
+      mutate(function () {
+        o.got = L.today(); o.split = parts.map(function (x) { return [x.g.id, x.v]; });
+        parts.forEach(function (x) { x.g.saved = Math.round((x.g.saved + x.v) * 100) / 100; (x.g.log = x.g.log || []).push({ d: L.today(), a: x.v, n: 'Received: ' + o.name }); });
+        if (nn && na > 0) (S.profile.goals = S.profile.goals || []).push({ id: L.uid(), name: nn, target: 0, saved: na, monthly: 0, by: '', log: [{ d: L.today(), a: na, n: 'Received: ' + o.name }] });
+        markProfile();
+      });
+      closeSheet(); render(); toast('Added to your savings'); break;
+    }
+    case 'owed-got-old':
       mutate(function () {
         const o = (S.profile.owed || []).filter(function (x) { return x.id === el.dataset.id; })[0];
         if (!o || o.got) return;
