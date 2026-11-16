@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:38'; window.__BID__ = '2026-11-16 04:38:23'; window.__VER__ = 127; window.__NOTES__ = [{"v": 127, "date": "16 Nov", "title": "Split expected money over savings accounts", "notes": ["Received on expected money now asks where it goes: put any amount in each savings account", "You can create a new savings account right there", "Amounts you do not place stay as normal money"]}, {"v": 126, "date": "16 Nov", "title": "Edit or delete expected money", "notes": ["Savings: every item under Money you are expecting now has an Edit button", "For money someone owes you, Edit lets you change the amount or delete it", "For per diem and allowance, Edit opens the trip, where you change the per diem or allowance amount"]}, {"v": 125, "date": "15 Nov", "title": "ABN debit card entries tidied", "notes": ["Entries paid with the ABN AMRO Betaalpas now say ABN AMRO bank account, so they count in My accounts"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '16 Nov 04:39'; window.__BID__ = '2026-11-16 04:39:53'; window.__VER__ = 128; window.__NOTES__ = [{"v": 128, "date": "16 Nov", "title": "Split per diem and allowance over savings accounts", "notes": ["Moving per diem left to savings: split it over any savings accounts, or create a new one", "Allowance received: optionally put part straight into savings accounts", "Amounts you do not place stay as normal money"]}, {"v": 127, "date": "16 Nov", "title": "Split expected money over savings accounts", "notes": ["Received on expected money now asks where it goes: put any amount in each savings account", "You can create a new savings account right there", "Amounts you do not place stay as normal money"]}, {"v": 126, "date": "16 Nov", "title": "Edit or delete expected money", "notes": ["Savings: every item under Money you are expecting now has an Edit button", "For money someone owes you, Edit lets you change the amount or delete it", "For per diem and allowance, Edit opens the trip, where you change the per diem or allowance amount"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3478,7 +3478,9 @@ function alSheet(id) {
   if (!A) return;
   openSheet('<h3>Allowance received</h3><div class="stack"><p class="small muted">' + esc(t.name) + '. Estimate: ' + money(A.grossHome) + ' before tax' + (A.tax > 0 ? ', ' + money(A.netHome) + ' after ' + A.tax + '% tax' : '') + '. Type the amount that actually reached your bank.</p>' +
     '<div class="grid2"><label>Amount received (' + S.profile.currency + ')<input id="al-amt" type="number" inputmode="decimal" step="0.01" min="0" value="' + A.netHome.toFixed(2) + '"></label><label>Date<input id="al-date" type="date" value="' + L.today() + '"></label></div>' +
+    '<p class="small muted">Optional: put part of it straight into savings.</p>' + splitFieldsHTML(null) +
     '<div class="btns"><button class="btn" data-act="al-save" data-id="' + esc(id) + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+  wireSplit(function () { return parseFloat(val('al-amt')) || 0; });
 }
 function ccPaySheet() {
   const C = L.creditInfo(S.profile, S.months, L.today());
@@ -4222,6 +4224,29 @@ function goalSheet(id) {
     '<div class="grid2"><label>Planned per month<input id="g-m" type="number" inputmode="decimal" min="0" step="10" value="' + (g ? g.monthly : '') + '"></label><label>Want it by (optional)<input id="g-b" type="date" value="' + (g && g.by ? g.by : '') + '"></label></div>' +
     '<div class="btns"><button class="btn" data-act="save-goal" data-id="' + esc(id || '') + '">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button>' + (g ? '<button class="btn danger" data-act="del-goal" data-id="' + esc(id) + '">Delete</button>' : '') + '</div></div>');
 }
+function splitFieldsHTML(def) {
+  const gs = S.profile.goals || [];
+  return gs.map(function (g, i) { return '<label>' + esc(g.name) + ' <span class="muted small">(now ' + money(g.saved) + ')</span><input id="sp-' + i + '" data-sp type="number" inputmode="decimal" step="0.01" min="0" value="' + (def && def.id === g.id ? def.v : '') + '" placeholder="0"></label>'; }).join('') +
+    '<label>Or a new savings account<input id="sp-new-n" type="text" placeholder="Name, for example ABN savings"></label><label>Amount for the new account<input id="sp-new-a" data-sp type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></label><p class="small muted" id="sp-left"></p>';
+}
+function wireSplit(getTotal) {
+  const upd = function () { let t = 0; document.querySelectorAll('[data-sp]').forEach(function (i) { t += parseFloat(i.value) || 0; }); const l = Math.round((getTotal() - t) * 100) / 100; const e = document.getElementById('sp-left'); if (e) e.textContent = l > 0.004 ? money(l, true) + ' stays as normal money.' : (l < -0.004 ? 'Too much by ' + money(-l, true) : 'All placed.'); };
+  document.querySelectorAll('[data-sp],#al-amt').forEach(function (i) { i.addEventListener('input', upd); }); upd();
+}
+/* reads the split fields; returns null (after a message) when they do not add up */
+function readSplit(total) {
+  const gs = S.profile.goals || [], parts = [];
+  gs.forEach(function (g, i) { const v = parseFloat((document.getElementById('sp-' + i) || {}).value) || 0; if (v > 0) parts.push({ g: g, v: v }); });
+  const nn = val('sp-new-n').trim(), na = parseFloat(val('sp-new-a')) || 0;
+  const tot = parts.reduce(function (t, x) { return t + x.v; }, 0) + (nn ? na : 0);
+  if (tot > total + 0.005) { toast('That is more than ' + money(total, true)); return null; }
+  if (!nn && na > 0) { toast('Give the new account a name'); return null; }
+  return { parts: parts, nn: nn, na: nn ? na : 0 };
+}
+function applySplit(sp, note) {
+  sp.parts.forEach(function (x) { x.g.saved = Math.round((x.g.saved + x.v) * 100) / 100; (x.g.log = x.g.log || []).push({ d: L.today(), a: x.v, n: note }); });
+  if (sp.nn && sp.na > 0) (S.profile.goals = S.profile.goals || []).push({ id: L.uid(), name: sp.nn, target: 0, saved: sp.na, monthly: 0, by: '', log: [{ d: L.today(), a: sp.na, n: note }] });
+}
 function splitSheet(id) {
   const o = (S.profile.owed || []).filter(function (x) { return x.id === id; })[0]; if (!o) return;
   const gs = S.profile.goals || [];
@@ -4247,10 +4272,10 @@ function moveSheet(tripId) {
   const m = tripMoney(t);
   const left = Math.max(0, Math.round((m.left - (t.moved || 0)) * 100) / 100);
   const gs = S.profile.goals || [];
-  openSheet('<h3>Move what is left to savings</h3><div class="stack"><p class="small muted">Per diem left after trip spending for ' + esc(t.name) + '.</p>' +
-    '<div class="grid2"><label>Amount (' + S.profile.currency + ')<input id="m-a" type="number" inputmode="decimal" step="0.01" min="0" value="' + left + '"></label>' +
-    '<label>Into<select id="m-p">' + gs.map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + '</option>'; }).join('') + '</select></label></div>' +
+  openSheet('<h3>Move what is left to savings</h3><div class="stack"><p class="small muted">Per diem left after trip spending for ' + esc(t.name) + '. You can have up to ' + money(left, true) + '. Split it over your savings accounts.</p>' +
+    splitFieldsHTML(gs[0] ? { id: gs[0].id, v: left } : null) +
     '<div class="btns"><button class="btn" data-act="save-move" data-id="' + esc(tripId) + '">Move</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+  wireSplit(function () { return left; });
 }
 function depositSheet(id) {
   const g = (S.profile.goals || []).filter(function (x) { return x.id === id; })[0];
@@ -4752,9 +4777,11 @@ function onAction(act, el) {
     case 'al-save': {
       const v = numval('al-amt'), d = val('al-date') || L.today();
       if (isNaN(v) || v <= 0) { toast('Enter the amount received'); break; }
+      const asp = readSplit(v); if (!asp) break;
       mutate(function () {
         const t = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0];
         if (!t || t.alPaid) return;
+        applySplit(asp, 'Allowance: ' + t.name);
         t.alPaid = d; t.alAmount = Math.round(v * 100) / 100;
         addTx({ id: L.uid(), d: d, m: 'Allowance: ' + t.name, a: -t.alAmount, c: 'Income', it: 'allowance', src: 'alw', alt: t.id });
         markProfile();
@@ -4802,17 +4829,12 @@ function onAction(act, el) {
       render(); toast('Per diem is expected again'); break;
     case 'move-left': moveSheet(el.dataset.id); break;
     case 'save-move': {
-      const a = numval('m-a');
-      if (isNaN(a) || a <= 0) { toast('Enter an amount'); break; }
-      mutate(function () {
-        const t = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-        const g = (S.profile.goals || []).filter(function (x) { return x.id === val('m-p'); })[0];
-        if (!t || !g) return;
-        t.moved = Math.round(((t.moved || 0) + a) * 100) / 100;
-        g.saved = Math.round((g.saved + a) * 100) / 100;
-        (g.log = g.log || []).push({ d: L.today(), a: a, n: 'Per diem left: ' + t.name });
-        markProfile();
-      });
+      const t0 = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (!t0) break;
+      const m0 = tripMoney(t0), left0 = Math.max(0, Math.round((m0.left - (t0.moved || 0)) * 100) / 100);
+      const sp = readSplit(left0); if (!sp) break;
+      const tot = sp.parts.reduce(function (t, x) { return t + x.v; }, 0) + sp.na;
+      if (!(tot > 0)) { toast('Enter an amount'); break; }
+      mutate(function () { t0.moved = Math.round(((t0.moved || 0) + tot) * 100) / 100; applySplit(sp, 'Per diem left: ' + t0.name); markProfile(); });
       closeSheet(); render(); toast('Moved to savings'); break;
     }
     case 'save-goal': {
