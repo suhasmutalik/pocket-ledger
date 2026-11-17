@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 05:28'; window.__BID__ = '2026-11-17 05:28:55'; window.__VER__ = 137; window.__NOTES__ = [{"v": 137, "date": "17 Nov", "title": "Clearer refill plan", "notes": ["The refill plan now splits the amount evenly (for example 347 a month for 2 months) and states the total to put back"]}, {"v": 136, "date": "17 Nov", "title": "Clearer wish deadline", "notes": ["When the wish date is less than a month away, it now says the total needed and the days left, instead of 'per month for 1 month'"]}, {"v": 135, "date": "17 Nov", "title": "Realistic price and cheaper options", "notes": ["When a wish costs more than you can reach, it shows a realistic price for your plan without using savings", "It also shows cheaper targets (20% and 35% less) and how soon each would be ready", "Tap a Target button to change the wish to that price"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 05:30'; window.__BID__ = '2026-11-17 05:30:57'; window.__VER__ = 138; window.__NOTES__ = [{"v": 138, "date": "17 Nov", "title": "Choose how much you put back", "notes": ["The Wish list now has a Change button for how much you can put back each month", "All refill plans and wish plans use your amount. Leave it empty to use the estimate"]}, {"v": 137, "date": "17 Nov", "title": "Clearer refill plan", "notes": ["The refill plan now splits the amount evenly (for example 347 a month for 2 months) and states the total to put back"]}, {"v": 136, "date": "17 Nov", "title": "Clearer wish deadline", "notes": ["When the wish date is less than a month away, it now says the total needed and the days left, instead of 'per month for 1 month'"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4313,7 +4313,7 @@ function wishCtx() {
   const M = L.monthSummary(p, S.months, NOW_KEY), nowLeft = Math.max(0, Math.floor(M.extra && M.extra.canSave || 0));
   const pots = (p.goals || []).reduce(function (t, g) { return t + Math.max(0, g.saved); }, 0);
   const usable = (p.goals || []).filter(function (g) { return !/emergency/i.test(g.name); }).reduce(function (t, g) { return t + Math.max(0, g.saved); }, 0);
-  return { usable: usable, rate: Math.floor(Math.max(0, free - planned) + ideas.reduce(function (s2, i) { return s2 + i.save; }, 0)), nowLeft: nowLeft, pots: pots, R: R, ideas: ideas, known: known, free: free, planned: planned, avail: avail, trims: trims, basis: R.basis };
+  return { usable: usable, rate: p.refillPm > 0 ? p.refillPm : Math.floor(Math.max(0, free - planned) + ideas.reduce(function (s2, i) { return s2 + i.save; }, 0)), rateSet: p.refillPm > 0, nowLeft: nowLeft, pots: pots, R: R, ideas: ideas, known: known, free: free, planned: planned, avail: avail, trims: trims, basis: R.basis };
 }
 function wishPlan(w, ctx, nOpen) {
   const need = Math.max(0, Math.round((w.cost - (w.have || 0)) * 100) / 100), today = L.today();
@@ -4418,7 +4418,7 @@ function wishlistHTML(exp) {
     ? 'Each month you have about <b>' + money(ctx.free) + '</b> free after bills and normal spending' + (ctx.planned > 0 ? ', and ' + money(ctx.planned) + ' of it is already planned for your pots, which leaves <b>' + money(ctx.avail) + '</b>' : '') + '. Trimming ideas could add about <b>' + money(ctx.trims) + '</b>.' + (ctx.basis < 2 ? ' This is an early guess. It gets better with more logged months.' : '')
     : 'Set your monthly salary in Settings so the plan can work out your free money.';
   return '<section><div class="sec-head"><h2>Wish list</h2><button class="link" data-act="wish-edit" data-id="">Add wish</button></div>' +
-    '<div class="card pad small muted" style="margin-bottom:8px">' + head + (exp && exp.total > 0 && needsAll > 0 ? ' You are also expecting ' + money(exp.total) + ' of other money.' : '') + '</div>' +
+    '<div class="card pad small muted" style="margin-bottom:8px">' + head + '<div class="top-row" style="margin-top:8px"><span>Put back each month to refill savings: <b>' + (ctx.rate > 0 ? money(ctx.rate) : 'not set') + '</b> ' + (ctx.rateSet ? '(set by you)' : '(estimate)') + '</span><button class="link" data-act="refill-rate">Change</button></div>' + (exp && exp.total > 0 && needsAll > 0 ? ' You are also expecting ' + money(exp.total) + ' of other money.' : '') + '</div>' +
     (ws.length ? '<div class="card list">' + ws.map(card).join('') + '</div>' : '<div class="card empty">Nothing yet. Add something to buy or a trip you want, with the price and an optional date.</div>') + '</section>';
 }
 function wishSheet(id) {
@@ -4439,6 +4439,11 @@ function wishFundSheet(id) {
     '<label>Take it from<select id="wf-from">' + gs.map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + ' (now ' + money(g.saved, true) + ')</option>'; }).join('') + '<option value="">Other money, not from a pot</option></select></label>' +
     '<label>Amount<input id="wf-a" type="number" inputmode="decimal" step="0.01" min="0" value="' + (need > 0 ? Math.min(need, Math.max(0, (gs[0] || {}).saved || 0)) || '' : '') + '"></label>' +
     '<div class="btns"><button class="btn" data-act="wish-fund-go" data-id="' + esc(id) + '">Set aside</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+}
+function rateSheet() {
+  openSheet('<h3>How much can you put back each month?</h3><div class="stack"><p class="small muted">This is used to plan how long it takes to refill savings after you use them. Leave it empty to use the estimate from your data.</p>' +
+    '<label>Amount per month (EUR)<input id="rr-a" type="number" inputmode="decimal" step="5" min="0" value="' + (S.profile.refillPm > 0 ? S.profile.refillPm : '') + '"></label>' +
+    '<div class="btns"><button class="btn" data-act="refill-rate-go">Save</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
 }
 function refillSheet(id, per) {
   const w = (S.profile.wishes || []).filter(function (x) { return x.id === id; })[0]; if (!w) return;
@@ -4864,6 +4869,12 @@ function onAction(act, el) {
     case 'new-goal': goalSheet(null); break;
     case 'edit-goal': goalSheet(el.dataset.id); break;
     case 'wish-edit': wishSheet(el.dataset.id); break;
+    case 'refill-rate': rateSheet(); break;
+    case 'refill-rate-go': {
+      const v = numval('rr-a');
+      mutate(function () { S.profile.refillPm = !isNaN(v) && v > 0 ? Math.round(v) : 0; markProfile(); });
+      closeSheet(); render(); toast(S.profile.refillPm > 0 ? 'Saved ' + money(S.profile.refillPm) + ' a month' : 'Using the estimate'); break;
+    }
     case 'wish-price': {
       const v = Number(el.dataset.v);
       mutate(function () { const w = (S.profile.wishes || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (w && v > 0) { w.cost = v; markProfile(); } });
