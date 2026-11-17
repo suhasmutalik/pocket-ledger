@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 03:21'; window.__BID__ = '2026-11-17 03:21:22'; window.__VER__ = 132; window.__NOTES__ = [{"v": 132, "date": "17 Nov", "title": "Wish list", "notes": ["New Wish list in Savings: add something to buy or a trip, with a price and an optional date", "The app works out your free money each month from your bills and spending, how much to save each month, and how long it will take", "If the date is too tight it shows where you can trim (streaming, eating out, shopping) and the earliest date that works", "Set money aside moves money from a pot into the wish. Bought marks it done"]}, {"v": 131, "date": "16 Nov", "title": "Move money between savings pots", "notes": ["Each pot has a new Move to another pot button", "Pick the other pot, the amount and the date. Both pots show it in their history"]}, {"v": 130, "date": "16 Nov", "title": "Splitting money is easier", "notes": ["In the split sheet, the box that starts full now shrinks by itself as you type amounts in the other boxes", "So you no longer get 'That is more than' when moving money to other accounts"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 03:22'; window.__BID__ = '2026-11-17 03:22:17'; window.__VER__ = 133; window.__NOTES__ = [{"v": 133, "date": "17 Nov", "title": "Can you afford it?", "notes": ["Each wish now says if you can afford it today, based on money set aside plus what is left this month", "If the price is above that, it shows how much you are short and what you could reach within 3 months", "It also tells you when your savings pots would cover it, but using them would drain your savings"]}, {"v": 132, "date": "17 Nov", "title": "Wish list", "notes": ["New Wish list in Savings: add something to buy or a trip, with a price and an optional date", "The app works out your free money each month from your bills and spending, how much to save each month, and how long it will take", "If the date is too tight it shows where you can trim (streaming, eating out, shopping) and the earliest date that works", "Set money aside moves money from a pot into the wish. Bought marks it done"]}, {"v": 131, "date": "16 Nov", "title": "Move money between savings pots", "notes": ["Each pot has a new Move to another pot button", "Pick the other pot, the amount and the date. Both pots show it in their history"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4310,7 +4310,9 @@ function wishCtx() {
   const planned = (p.goals || []).reduce(function (s, g) { return s + (g.monthly > 0 ? g.monthly : 0); }, 0);
   const avail = Math.max(0, free - planned);
   const trims = Math.floor(ideas.reduce(function (s, i) { return s + i.save; }, 0));
-  return { R: R, ideas: ideas, known: known, free: free, planned: planned, avail: avail, trims: trims, basis: R.basis };
+  const M = L.monthSummary(p, S.months, NOW_KEY), nowLeft = Math.max(0, Math.floor(M.extra && M.extra.canSave || 0));
+  const pots = (p.goals || []).reduce(function (t, g) { return t + Math.max(0, g.saved); }, 0);
+  return { nowLeft: nowLeft, pots: pots, R: R, ideas: ideas, known: known, free: free, planned: planned, avail: avail, trims: trims, basis: R.basis };
 }
 function wishPlan(w, ctx, nOpen) {
   const need = Math.max(0, Math.round((w.cost - (w.have || 0)) * 100) / 100), today = L.today();
@@ -4364,8 +4366,16 @@ function wishlistHTML(exp) {
       if ((pl.verdict === 'trim' || pl.verdict === 'tight' || (pl.verdict === 'open' && (pl.gap > 0 || !(pl.perMonth >= 1)))) && ctx.ideas.length)
         lines += '<p class="small muted" style="margin-top:6px">Where to find it: ' + ctx.ideas.slice(0, 3).map(function (i) { return esc(i.title.toLowerCase()) + ' (' + money(i.save) + ')'; }).join(', ') + '.</p>';
     }
+    let cap = '';
+    if (!pl.done) {
+      const now = Math.floor((w.have || 0) + ctx.nowLeft), in3 = now + 3 * (ctx.avail + ctx.trims);
+      if (w.cost <= now) cap = '<p class="small" style="margin:6px 0"><b>&#9989; You can afford this now.</b> Money set aside plus what is left this month is about ' + money(now) + '.</p>';
+      else if (w.cost <= in3) cap = '<p class="small" style="margin:6px 0"><b>&#9888;&#65039; More than you can pay today.</b> Today you can cover about ' + money(now) + ' of the ' + money(w.cost) + ' (' + money(w.cost - now) + ' short). Within 3 months you could reach about ' + money(in3) + '.</p>';
+      else cap = '<p class="small" style="margin:6px 0"><b>&#9940; Above your current capacity.</b> Your data says you can pay about ' + money(now) + ' today and about ' + money(in3) + ' within 3 months. The price is ' + money(w.cost) + '.</p>';
+      if (w.cost > now && ctx.pots >= w.cost - (w.have || 0)) cap += '<p class="small muted">Your savings pots hold ' + money(ctx.pots) + ', enough to pay for it, but that would use up your savings.</p>';
+    }
     return '<div class="goal" style="--h:' + hueOfName(w.name) + '"><div class="top-row"><span class="nm">' + (w.kind === 'travel' ? '&#9992; ' : '&#127873; ') + esc(w.name) + '</span><span class="mono" style="font-size:18px">' + money(w.have || 0, true) + ' <span class="muted small">of ' + money(w.cost, true) + '</span></span></div>' +
-      bar(pc, 'good') + lines +
+      bar(pc, 'good') + cap + lines +
       '<div class="btns"><button class="btn sm" data-act="wish-fund" data-id="' + esc(w.id) + '">Set money aside</button>' + (pl.done ? '<button class="btn sm" data-act="wish-bought" data-id="' + esc(w.id) + '">Bought</button>' : '') + '<button class="btn sm ghost" data-act="wish-edit" data-id="' + esc(w.id) + '">Edit</button></div></div>';
   };
   const needsAll = ws.reduce(function (t, w) { return t + Math.max(0, w.cost - (w.have || 0)); }, 0);
