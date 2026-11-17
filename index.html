@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 03:22'; window.__BID__ = '2026-11-17 03:22:17'; window.__VER__ = 133; window.__NOTES__ = [{"v": 133, "date": "17 Nov", "title": "Can you afford it?", "notes": ["Each wish now says if you can afford it today, based on money set aside plus what is left this month", "If the price is above that, it shows how much you are short and what you could reach within 3 months", "It also tells you when your savings pots would cover it, but using them would drain your savings"]}, {"v": 132, "date": "17 Nov", "title": "Wish list", "notes": ["New Wish list in Savings: add something to buy or a trip, with a price and an optional date", "The app works out your free money each month from your bills and spending, how much to save each month, and how long it will take", "If the date is too tight it shows where you can trim (streaming, eating out, shopping) and the earliest date that works", "Set money aside moves money from a pot into the wish. Bought marks it done"]}, {"v": 131, "date": "16 Nov", "title": "Move money between savings pots", "notes": ["Each pot has a new Move to another pot button", "Pick the other pot, the amount and the date. Both pots show it in their history"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 03:27'; window.__BID__ = '2026-11-17 03:27:06'; window.__VER__ = 134; window.__NOTES__ = [{"v": 134, "date": "17 Nov", "title": "Use savings and refill them", "notes": ["Each wish now shows if you could pay it by using your savings (your Emergency fund stays untouched)", "It plans how much to put back each month and when your pots are full again", "After you use a pot for a wish, a Refill block tracks what is left to put back, with a Refill now button"]}, {"v": 133, "date": "17 Nov", "title": "Can you afford it?", "notes": ["Each wish now says if you can afford it today, based on money set aside plus what is left this month", "If the price is above that, it shows how much you are short and what you could reach within 3 months", "It also tells you when your savings pots would cover it, but using them would drain your savings"]}, {"v": 132, "date": "17 Nov", "title": "Wish list", "notes": ["New Wish list in Savings: add something to buy or a trip, with a price and an optional date", "The app works out your free money each month from your bills and spending, how much to save each month, and how long it will take", "If the date is too tight it shows where you can trim (streaming, eating out, shopping) and the earliest date that works", "Set money aside moves money from a pot into the wish. Bought marks it done"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4312,7 +4312,8 @@ function wishCtx() {
   const trims = Math.floor(ideas.reduce(function (s, i) { return s + i.save; }, 0));
   const M = L.monthSummary(p, S.months, NOW_KEY), nowLeft = Math.max(0, Math.floor(M.extra && M.extra.canSave || 0));
   const pots = (p.goals || []).reduce(function (t, g) { return t + Math.max(0, g.saved); }, 0);
-  return { nowLeft: nowLeft, pots: pots, R: R, ideas: ideas, known: known, free: free, planned: planned, avail: avail, trims: trims, basis: R.basis };
+  const usable = (p.goals || []).filter(function (g) { return !/emergency/i.test(g.name); }).reduce(function (t, g) { return t + Math.max(0, g.saved); }, 0);
+  return { usable: usable, rate: Math.floor(Math.max(0, free - planned) + ideas.reduce(function (s2, i) { return s2 + i.save; }, 0)), nowLeft: nowLeft, pots: pots, R: R, ideas: ideas, known: known, free: free, planned: planned, avail: avail, trims: trims, basis: R.basis };
 }
 function wishPlan(w, ctx, nOpen) {
   const need = Math.max(0, Math.round((w.cost - (w.have || 0)) * 100) / 100), today = L.today();
@@ -4346,9 +4347,19 @@ function wishPlan(w, ctx, nOpen) {
 }
 function wishlistHTML(exp) {
   if (!('Wish list' in foldOpen)) foldOpen['Wish list'] = true;
-  const ws = (S.profile.wishes || []).filter(function (w) { return !w.done; });
-  const ctx = wishCtx(), open = ws.filter(function (w) { return w.cost - (w.have || 0) > 0.004; }).length;
+  const owe = function (w) { return (w.borrow || []).reduce(function (t, b) { return t + Math.max(0, b.amt - (b.paid || 0)); }, 0); };
+  const ws = (S.profile.wishes || []).filter(function (w) { return !w.done || owe(w) > 0.004; });
+  const ctx = wishCtx(), open = ws.filter(function (w) { return !w.done && w.cost - (w.have || 0) > 0.004; }).length;
+  const refillBlock = function (w) {
+    const o = owe(w); if (o <= 0.004) return '';
+    const rate = ctx.rate, per = rate >= 5 ? Math.min(Math.ceil(o), rate) : 0, n = per ? Math.ceil(o / per) : 0;
+    return '<div class="small" style="margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(127,127,127,.12)"><b>Refill your savings: ' + money(o, true) + ' to put back</b><br>' +
+      (w.borrow || []).filter(function (b) { return b.amt - (b.paid || 0) > 0.004; }).map(function (b) { return esc(potName(b.g)) + ' ' + money(b.amt - (b.paid || 0), true); }).join(', ') + '<br>' +
+      (per ? 'Plan: ' + money(per) + ' a month for ' + n + (n === 1 ? ' month' : ' months') + ', done by ' + esc(L.monthLabel(L.addMonths(L.monthKey(L.today()), n), true)) + '.' : 'No free money found each month. Add money to the pot yourself when you can.') +
+      '<div class="btns" style="margin-top:6px"><button class="btn sm" data-act="wish-refill" data-id="' + esc(w.id) + '" data-per="' + per + '">Refill now</button></div></div>';
+  };
   const card = function (w) {
+    if (w.done) return '<div class="goal" style="--h:' + hueOfName(w.name) + '"><div class="top-row"><span class="nm">&#9989; ' + esc(w.name) + ' <span class="muted small">bought</span></span></div>' + refillBlock(w) + '</div>';
     const pl = wishPlan(w, ctx, open), pc = Math.min(100, w.cost > 0 ? (w.have || 0) / w.cost * 100 : 0);
     let lines = '';
     if (pl.done) lines = '<p class="small"><b>You have all of it.</b> Tap Bought when you have paid.</p>';
@@ -4372,11 +4383,18 @@ function wishlistHTML(exp) {
       if (w.cost <= now) cap = '<p class="small" style="margin:6px 0"><b>&#9989; You can afford this now.</b> Money set aside plus what is left this month is about ' + money(now) + '.</p>';
       else if (w.cost <= in3) cap = '<p class="small" style="margin:6px 0"><b>&#9888;&#65039; More than you can pay today.</b> Today you can cover about ' + money(now) + ' of the ' + money(w.cost) + ' (' + money(w.cost - now) + ' short). Within 3 months you could reach about ' + money(in3) + '.</p>';
       else cap = '<p class="small" style="margin:6px 0"><b>&#9940; Above your current capacity.</b> Your data says you can pay about ' + money(now) + ' today and about ' + money(in3) + ' within 3 months. The price is ' + money(w.cost) + '.</p>';
-      if (w.cost > now && ctx.pots >= w.cost - (w.have || 0)) cap += '<p class="small muted">Your savings pots hold ' + money(ctx.pots) + ', enough to pay for it, but that would use up your savings.</p>';
+      if (w.cost > now) {
+        const short = Math.ceil(w.cost - now), rate = ctx.rate;
+        if (ctx.usable >= short) {
+          cap += '<p class="small" style="margin:6px 0"><b>&#128161; With your savings:</b> take ' + money(short) + ' from your pots' + (ctx.pots > ctx.usable ? ' (your Emergency fund stays untouched)' : '') + ' and you can pay it now. ' +
+            (rate >= 5 ? 'To refill them, put back about ' + money(rate) + ' a month for ' + Math.ceil(short / rate) + (Math.ceil(short / rate) === 1 ? ' month' : ' months') + ' (' + esc(L.monthLabel(L.addMonths(L.monthKey(L.today()), Math.ceil(short / rate)), true)) + ').' : 'Your data shows no free money to refill them, so they would stay lower.') + '</p>';
+        } else if (ctx.pots >= short) cap += '<p class="small muted" style="margin:6px 0">Only your Emergency fund could cover the rest, so using savings is not suggested.</p>';
+        else cap += '<p class="small muted" style="margin:6px 0">Even with all your savings (' + money(ctx.pots) + ') you would be short.</p>';
+      }
     }
     return '<div class="goal" style="--h:' + hueOfName(w.name) + '"><div class="top-row"><span class="nm">' + (w.kind === 'travel' ? '&#9992; ' : '&#127873; ') + esc(w.name) + '</span><span class="mono" style="font-size:18px">' + money(w.have || 0, true) + ' <span class="muted small">of ' + money(w.cost, true) + '</span></span></div>' +
-      bar(pc, 'good') + cap + lines +
-      '<div class="btns"><button class="btn sm" data-act="wish-fund" data-id="' + esc(w.id) + '">Set money aside</button>' + (pl.done ? '<button class="btn sm" data-act="wish-bought" data-id="' + esc(w.id) + '">Bought</button>' : '') + '<button class="btn sm ghost" data-act="wish-edit" data-id="' + esc(w.id) + '">Edit</button></div></div>';
+      bar(pc, 'good') + cap + lines + refillBlock(w) +
+      '<div class="btns"><button class="btn sm" data-act="wish-fund" data-id="' + esc(w.id) + '">Set aside / use savings</button>' + (pl.done ? '<button class="btn sm" data-act="wish-bought" data-id="' + esc(w.id) + '">Bought</button>' : '') + '<button class="btn sm ghost" data-act="wish-edit" data-id="' + esc(w.id) + '">Edit</button></div></div>';
   };
   const needsAll = ws.reduce(function (t, w) { return t + Math.max(0, w.cost - (w.have || 0)); }, 0);
   const head = ctx.known
@@ -4400,10 +4418,19 @@ function wishSheet(id) {
 function wishFundSheet(id) {
   const w = (S.profile.wishes || []).filter(function (x) { return x.id === id; })[0]; if (!w) return;
   const gs = S.profile.goals || [], need = Math.max(0, w.cost - (w.have || 0));
-  openSheet('<h3>Set money aside for ' + esc(w.name) + '</h3><div class="stack"><p class="small muted">Still needed: ' + money(need, true) + '. The money moves out of the pot you choose and is kept for this wish.</p>' +
+  openSheet('<h3>Set money aside for ' + esc(w.name) + '</h3><div class="stack"><p class="small muted">Still needed: ' + money(need, true) + '. The money moves out of the pot you choose and is kept for this wish. If it comes from a pot, the app plans how to refill that pot.</p>' +
     '<label>Take it from<select id="wf-from">' + gs.map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.name) + ' (now ' + money(g.saved, true) + ')</option>'; }).join('') + '<option value="">Other money, not from a pot</option></select></label>' +
     '<label>Amount<input id="wf-a" type="number" inputmode="decimal" step="0.01" min="0" value="' + (need > 0 ? Math.min(need, Math.max(0, (gs[0] || {}).saved || 0)) || '' : '') + '"></label>' +
     '<div class="btns"><button class="btn" data-act="wish-fund-go" data-id="' + esc(id) + '">Set aside</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+}
+function refillSheet(id, per) {
+  const w = (S.profile.wishes || []).filter(function (x) { return x.id === id; })[0]; if (!w) return;
+  const ob = (w.borrow || []).filter(function (b) { return b.amt - (b.paid || 0) > 0.004; });
+  if (!ob.length) return;
+  openSheet('<h3>Refill savings</h3><div class="stack"><p class="small muted">Put money back into the pot you took it from.</p>' +
+    '<label>Pot<select id="rf-g">' + ob.map(function (b) { return '<option value="' + esc(b.g) + '">' + esc(potName(b.g)) + ' (to put back ' + money(b.amt - (b.paid || 0), true) + ')</option>'; }).join('') + '</select></label>' +
+    '<label>Amount<input id="rf-a" type="number" inputmode="decimal" step="0.01" min="0" value="' + (per > 0 ? Math.min(per, ob[0].amt - (ob[0].paid || 0)) : '') + '"></label>' +
+    '<div class="btns"><button class="btn" data-act="wish-refill-go" data-id="' + esc(id) + '">Put back</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
 }
 function depositSheet(id) {
   const g = (S.profile.goals || []).filter(function (x) { return x.id === id; })[0];
@@ -4821,6 +4848,21 @@ function onAction(act, el) {
     case 'edit-goal': goalSheet(el.dataset.id); break;
     case 'wish-edit': wishSheet(el.dataset.id); break;
     case 'wish-fund': wishFundSheet(el.dataset.id); break;
+    case 'wish-refill': refillSheet(el.dataset.id, Number(el.dataset.per) || 0); break;
+    case 'wish-refill-go': {
+      const a = numval('rf-a'), gid = val('rf-g');
+      if (isNaN(a) || a <= 0) { toast('Enter an amount'); break; }
+      const w = (S.profile.wishes || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (!w) break;
+      const b = (w.borrow || []).filter(function (x) { return x.g === gid; })[0], g = (S.profile.goals || []).filter(function (x) { return x.id === gid; })[0];
+      if (!b || !g) break;
+      const left = b.amt - (b.paid || 0);
+      if (a > left + 0.005) { toast('Only ' + money(left, true) + ' is left to put back'); break; }
+      mutate(function () {
+        g.saved = Math.round((g.saved + a) * 100) / 100; (g.log = g.log || []).push({ d: L.today(), a: a, n: 'Refill after ' + w.name });
+        b.paid = Math.round(((b.paid || 0) + a) * 100) / 100; markProfile();
+      });
+      closeSheet(); render(); toast('Put back ' + money(a, true)); break;
+    }
     case 'wish-save': {
       const n = val('w-n').trim(), c = numval('w-c'), by = val('w-b'), m = numval('w-m');
       if (!n) { toast('Give the wish a name'); break; }
@@ -4851,7 +4893,11 @@ function onAction(act, el) {
       const g = (S.profile.goals || []).filter(function (x) { return x.id === from; })[0];
       if (g && a > g.saved + 0.005) { toast(g.name + ' only has ' + money(g.saved, true)); break; }
       mutate(function () {
-        if (g) { g.saved = Math.round((g.saved - a) * 100) / 100; (g.log = g.log || []).push({ d: L.today(), a: -a, n: 'Set aside for ' + w.name }); }
+        if (g) {
+          g.saved = Math.round((g.saved - a) * 100) / 100; (g.log = g.log || []).push({ d: L.today(), a: -a, n: 'Set aside for ' + w.name });
+          const bl = w.borrow = w.borrow || [], e = bl.filter(function (x) { return x.g === g.id; })[0];
+          if (e) e.amt = Math.round((e.amt + a) * 100) / 100; else bl.push({ g: g.id, amt: a, paid: 0 });
+        }
         w.have = Math.round(((w.have || 0) + a) * 100) / 100; markProfile();
       });
       closeSheet(); render(); toast('Set aside ' + money(a, true)); break;
