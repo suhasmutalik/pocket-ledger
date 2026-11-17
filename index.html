@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 03:27'; window.__BID__ = '2026-11-17 03:27:06'; window.__VER__ = 134; window.__NOTES__ = [{"v": 134, "date": "17 Nov", "title": "Use savings and refill them", "notes": ["Each wish now shows if you could pay it by using your savings (your Emergency fund stays untouched)", "It plans how much to put back each month and when your pots are full again", "After you use a pot for a wish, a Refill block tracks what is left to put back, with a Refill now button"]}, {"v": 133, "date": "17 Nov", "title": "Can you afford it?", "notes": ["Each wish now says if you can afford it today, based on money set aside plus what is left this month", "If the price is above that, it shows how much you are short and what you could reach within 3 months", "It also tells you when your savings pots would cover it, but using them would drain your savings"]}, {"v": 132, "date": "17 Nov", "title": "Wish list", "notes": ["New Wish list in Savings: add something to buy or a trip, with a price and an optional date", "The app works out your free money each month from your bills and spending, how much to save each month, and how long it will take", "If the date is too tight it shows where you can trim (streaming, eating out, shopping) and the earliest date that works", "Set money aside moves money from a pot into the wish. Bought marks it done"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 04:43'; window.__BID__ = '2026-11-17 04:43:50'; window.__VER__ = 135; window.__NOTES__ = [{"v": 135, "date": "17 Nov", "title": "Realistic price and cheaper options", "notes": ["When a wish costs more than you can reach, it shows a realistic price for your plan without using savings", "It also shows cheaper targets (20% and 35% less) and how soon each would be ready", "Tap a Target button to change the wish to that price"]}, {"v": 134, "date": "17 Nov", "title": "Use savings and refill them", "notes": ["Each wish now shows if you could pay it by using your savings (your Emergency fund stays untouched)", "It plans how much to put back each month and when your pots are full again", "After you use a pot for a wish, a Refill block tracks what is left to put back, with a Refill now button"]}, {"v": 133, "date": "17 Nov", "title": "Can you afford it?", "notes": ["Each wish now says if you can afford it today, based on money set aside plus what is left this month", "If the price is above that, it shows how much you are short and what you could reach within 3 months", "It also tells you when your savings pots would cover it, but using them would drain your savings"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4392,8 +4392,22 @@ function wishlistHTML(exp) {
         else cap += '<p class="small muted" style="margin:6px 0">Even with all your savings (' + money(ctx.pots) + ') you would be short.</p>';
       }
     }
+    let alt = '';
+    if (!pl.done) {
+      const base = Math.floor((w.have || 0) + ctx.nowLeft), rate = Math.max(0, ctx.avail + ctx.trims), mo = w.by && w.by >= L.today() ? pl.months : 6;
+      const reach = Math.floor((base + mo * rate) / 10) * 10;
+      if (w.cost > base && rate >= 5) {
+        const mthsFor = function (p) { return Math.max(0, Math.ceil((p - base) / rate)); };
+        const opts = [0.8, 0.65].map(function (f) { const p = Math.round(w.cost * f / 10) * 10; return { p: p, f: f }; }).filter(function (o) { return o.p >= 10 && o.p < w.cost; });
+        alt = '<div class="small" style="margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(127,127,127,.12)"><b>Realistic price for you</b><br>' +
+          (reach > 0 && reach < w.cost ? 'Without using savings you can reach about <b>' + money(reach) + '</b> ' + (w.by && w.by >= L.today() ? 'by ' + L.dateLabel(w.by) : 'in ' + mo + ' months') + '.' : 'The price is within reach for your plan.') +
+          (opts.length ? '<br>Cheaper ways to get it' + (w.kind === 'travel' ? ' (fewer days, off-season dates, cheaper stay)' : ' (second-hand, refurbished, last year\'s model, a sale)') + ':<br>' + opts.map(function (o) { return '&bull; about ' + money(o.p) + ' (' + Math.round((1 - o.f) * 100) + '% less): ready in ' + (mthsFor(o.p) <= 0 ? 'no time' : mthsFor(o.p) + (mthsFor(o.p) === 1 ? ' month' : ' months')); }).join('<br>') : '') +
+          '<div class="btns" style="margin-top:6px">' + (reach >= 10 && reach < w.cost ? '<button class="btn sm" data-act="wish-price" data-id="' + esc(w.id) + '" data-v="' + reach + '">Target ' + money(reach) + '</button>' : '') + opts.map(function (o) { return '<button class="btn sm ghost" data-act="wish-price" data-id="' + esc(w.id) + '" data-v="' + o.p + '">Target ' + money(o.p) + '</button>'; }).join('') + '</div>' +
+          '<span class="muted">These cheaper prices are rules of thumb, not shop prices. Tell Claude the item and it can look up real prices.</span></div>';
+      }
+    }
     return '<div class="goal" style="--h:' + hueOfName(w.name) + '"><div class="top-row"><span class="nm">' + (w.kind === 'travel' ? '&#9992; ' : '&#127873; ') + esc(w.name) + '</span><span class="mono" style="font-size:18px">' + money(w.have || 0, true) + ' <span class="muted small">of ' + money(w.cost, true) + '</span></span></div>' +
-      bar(pc, 'good') + cap + lines + refillBlock(w) +
+      bar(pc, 'good') + cap + alt + lines + refillBlock(w) +
       '<div class="btns"><button class="btn sm" data-act="wish-fund" data-id="' + esc(w.id) + '">Set aside / use savings</button>' + (pl.done ? '<button class="btn sm" data-act="wish-bought" data-id="' + esc(w.id) + '">Bought</button>' : '') + '<button class="btn sm ghost" data-act="wish-edit" data-id="' + esc(w.id) + '">Edit</button></div></div>';
   };
   const needsAll = ws.reduce(function (t, w) { return t + Math.max(0, w.cost - (w.have || 0)); }, 0);
@@ -4847,6 +4861,11 @@ function onAction(act, el) {
     case 'new-goal': goalSheet(null); break;
     case 'edit-goal': goalSheet(el.dataset.id); break;
     case 'wish-edit': wishSheet(el.dataset.id); break;
+    case 'wish-price': {
+      const v = Number(el.dataset.v);
+      mutate(function () { const w = (S.profile.wishes || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (w && v > 0) { w.cost = v; markProfile(); } });
+      render(); toast('Target price set to ' + money(v, true)); break;
+    }
     case 'wish-fund': wishFundSheet(el.dataset.id); break;
     case 'wish-refill': refillSheet(el.dataset.id, Number(el.dataset.per) || 0); break;
     case 'wish-refill-go': {
