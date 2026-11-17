@@ -676,7 +676,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 05:26'; window.__BID__ = '2026-11-17 05:26:50'; window.__VER__ = 136; window.__NOTES__ = [{"v": 136, "date": "17 Nov", "title": "Clearer wish deadline", "notes": ["When the wish date is less than a month away, it now says the total needed and the days left, instead of 'per month for 1 month'"]}, {"v": 135, "date": "17 Nov", "title": "Realistic price and cheaper options", "notes": ["When a wish costs more than you can reach, it shows a realistic price for your plan without using savings", "It also shows cheaper targets (20% and 35% less) and how soon each would be ready", "Tap a Target button to change the wish to that price"]}, {"v": 134, "date": "17 Nov", "title": "Use savings and refill them", "notes": ["Each wish now shows if you could pay it by using your savings (your Emergency fund stays untouched)", "It plans how much to put back each month and when your pots are full again", "After you use a pot for a wish, a Refill block tracks what is left to put back, with a Refill now button"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 05:28'; window.__BID__ = '2026-11-17 05:28:55'; window.__VER__ = 137; window.__NOTES__ = [{"v": 137, "date": "17 Nov", "title": "Clearer refill plan", "notes": ["The refill plan now splits the amount evenly (for example 347 a month for 2 months) and states the total to put back"]}, {"v": 136, "date": "17 Nov", "title": "Clearer wish deadline", "notes": ["When the wish date is less than a month away, it now says the total needed and the days left, instead of 'per month for 1 month'"]}, {"v": 135, "date": "17 Nov", "title": "Realistic price and cheaper options", "notes": ["When a wish costs more than you can reach, it shows a realistic price for your plan without using savings", "It also shows cheaper targets (20% and 35% less) and how soon each would be ready", "Tap a Target button to change the wish to that price"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4352,10 +4352,10 @@ function wishlistHTML(exp) {
   const ctx = wishCtx(), open = ws.filter(function (w) { return !w.done && w.cost - (w.have || 0) > 0.004; }).length;
   const refillBlock = function (w) {
     const o = owe(w); if (o <= 0.004) return '';
-    const rate = ctx.rate, per = rate >= 5 ? Math.min(Math.ceil(o), rate) : 0, n = per ? Math.ceil(o / per) : 0;
+    const rate = ctx.rate, n = rate >= 5 ? Math.ceil(o / rate) : 0, per = n ? Math.ceil(o / n) : 0;
     return '<div class="small" style="margin:8px 0;padding:8px 10px;border-radius:10px;background:rgba(127,127,127,.12)"><b>Refill your savings: ' + money(o, true) + ' to put back</b><br>' +
       (w.borrow || []).filter(function (b) { return b.amt - (b.paid || 0) > 0.004; }).map(function (b) { return esc(potName(b.g)) + ' ' + money(b.amt - (b.paid || 0), true); }).join(', ') + '<br>' +
-      (per ? 'Plan: ' + money(per) + ' a month for ' + n + (n === 1 ? ' month' : ' months') + ', done by ' + esc(L.monthLabel(L.addMonths(L.monthKey(L.today()), n), true)) + '.' : 'No free money found each month. Add money to the pot yourself when you can.') +
+      (per ? 'Plan: ' + (n === 1 ? money(per) + ' next month' : money(per) + ' a month for ' + n + ' months') + ', done by ' + esc(L.monthLabel(L.addMonths(L.monthKey(L.today()), n), true)) + '.' : 'No free money found each month. Add money to the pot yourself when you can.') +
       '<div class="btns" style="margin-top:6px"><button class="btn sm" data-act="wish-refill" data-id="' + esc(w.id) + '" data-per="' + per + '">Refill now</button></div></div>';
   };
   const card = function (w) {
@@ -4390,7 +4390,7 @@ function wishlistHTML(exp) {
         const short = Math.ceil(w.cost - now), rate = ctx.rate;
         if (ctx.usable >= short) {
           cap += '<p class="small" style="margin:6px 0"><b>&#128161; With your savings:</b> take ' + money(short) + ' from your pots' + (ctx.pots > ctx.usable ? ' (your Emergency fund stays untouched)' : '') + ' and you can pay it now. ' +
-            (rate >= 5 ? 'To refill them, put back about ' + money(rate) + ' a month for ' + Math.ceil(short / rate) + (Math.ceil(short / rate) === 1 ? ' month' : ' months') + ' (' + esc(L.monthLabel(L.addMonths(L.monthKey(L.today()), Math.ceil(short / rate)), true)) + ').' : 'Your data shows no free money to refill them, so they would stay lower.') + '</p>';
+            (rate >= 5 ? (function () { const n = Math.ceil(short / rate), per = Math.ceil(short / n); return 'To refill them, put back ' + money(short) + ' in total: ' + (n === 1 ? 'all of it next month' : money(per) + ' a month for ' + n + ' months') + ', full again by ' + esc(L.monthLabel(L.addMonths(L.monthKey(L.today()), n), true)) + '.'; })() : 'Your data shows no free money to refill them, so they would stay lower.') + '</p>';
         } else if (ctx.pots >= short) cap += '<p class="small muted" style="margin:6px 0">Only your Emergency fund could cover the rest, so using savings is not suggested.</p>';
         else cap += '<p class="small muted" style="margin:6px 0">Even with all your savings (' + money(ctx.pots) + ') you would be short.</p>';
       }
