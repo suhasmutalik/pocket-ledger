@@ -678,7 +678,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '18 Nov 00:08'; window.__BID__ = '2026-11-18 00:08:21'; window.__VER__ = 139; window.__NOTES__ = [{"v": 139, "date": "18 Nov", "title": "Savings charts fixed and tappable", "notes": ["Total saved no longer draws a flat line for months with no dated history. Only months with real data are plotted", "Tap any month on either chart to see exact numbers for it", "The second chart now shows the change in your savings pots (deposits minus withdrawals), and shows spending only for months that have any"]}, {"v": 138, "date": "17 Nov", "title": "Choose how much you put back", "notes": ["The Wish list now has a Change button for how much you can put back each month", "All refill plans and wish plans use your amount. Leave it empty to use the estimate"]}, {"v": 137, "date": "17 Nov", "title": "Clearer refill plan", "notes": ["The refill plan now splits the amount evenly (for example 347 a month for 2 months) and states the total to put back"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '18 Nov 00:11'; window.__BUILDMS__ = 1794989466896; window.__BID__ = '2026-11-18 00:11:06'; window.__VER__ = 140; window.__NOTES__ = [{"v": 140, "date": "18 Nov", "title": "Update time shown in your own time zone", "notes": ["The version line used the time zone of the computer that built the app, so it showed the wrong time. It now shows the time on your phone", "All other dates in the app already use your phone's date"]}, {"v": 139, "date": "18 Nov", "title": "Savings charts fixed and tappable", "notes": ["Total saved no longer draws a flat line for months with no dated history. Only months with real data are plotted", "Tap any month on either chart to see exact numbers for it", "The second chart now shows the change in your savings pots (deposits minus withdrawals), and shows spending only for months that have any"]}, {"v": 138, "date": "17 Nov", "title": "Choose how much you put back", "notes": ["The Wish list now has a Change button for how much you can put back each month", "All refill plans and wish plans use your amount. Leave it empty to use the estimate"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2132,7 +2132,11 @@ let saveTimer = null;
 function markProfile() { dirty.profile = true; sched(); }
 function markMonth(k) { dirty.months[k] = true; dirty.profile = true; sched(); }
 function sched() { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 350); setNote('Saving'); }
-function setNote(s) { saveNote = s; const el = $('#savenote'); if (el) el.textContent = (s ? s + ' \u00b7 ' : '') + (window.__BUILD__ ? 'v' + (window.__VER__ || '') + ' \u00b7 ' + window.__BUILD__ : ''); }
+function buildLabel() {
+  if (!window.__BUILDMS__) return window.__BUILD__ || '';
+  try { return new Date(window.__BUILDMS__).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (e) { return window.__BUILD__ || ''; }
+}
+function setNote(s) { saveNote = s; const el = $('#savenote'); if (el) el.textContent = (s ? s + ' \u00b7 ' : '') + (window.__BUILD__ ? 'v' + (window.__VER__ || '') + ' \u00b7 ' + buildLabel() : ''); }
 async function flush() {
   if (VIEWING) { dirty.profile = false; dirty.months = {}; return; }
   if (saving) { sched(); return; }
@@ -3866,7 +3870,7 @@ function backupText() {
 function noteBackup() { try { localStorage.setItem(BK_KEY, L.today()); } catch (e) { /* ignore */ } updateBanner(); }
 function backupHTML() {
   const lb = lastBackup();
-  return '<section><p class="small muted" style="text-align:center">App version: ' + (window.__VER__ ? window.__VER__ + ' \u00b7 ' : '') + (window.__BUILD__ || 'Claude page') + '</p>' + (window.__NOTES__ ? '<details class="card"><summary>What is new</summary><div class="body">' + window.__NOTES__.map(function (r) { return '<p><b>Version ' + r.v + ' &middot; ' + esc(r.date) + '</b><br>' + esc(r.title) + '</p><ul>' + r.notes.map(function (n) { return '<li class="small">' + esc(n) + '</li>'; }).join('') + '</ul>'; }).join('') + '</div></details>' : '') + '</section>' + '<section><h2>Backup</h2><div class="card pad stack">' +
+  return '<section><p class="small muted" style="text-align:center">App version: ' + (window.__VER__ ? window.__VER__ + ' \u00b7 ' : '') + (window.__BUILD__ ? buildLabel() : 'Claude page') + '</p>' + (window.__NOTES__ ? '<details class="card"><summary>What is new</summary><div class="body">' + window.__NOTES__.map(function (r) { return '<p><b>Version ' + r.v + ' &middot; ' + esc(r.date) + '</b><br>' + esc(r.title) + '</p><ul>' + r.notes.map(function (n) { return '<li class="small">' + esc(n) + '</li>'; }).join('') + '</ul>'; }).join('') + '</div></details>' : '') + '</section>' + '<section><h2>Backup</h2><div class="card pad stack">' +
     '<p class="small muted">' + (OFFLINE ? 'Your ledger is saved only on this phone. Make a backup now and then, so a lost phone or a deleted app does not take it with it.' : 'Copy your whole ledger as text. You can paste it into the offline copy of this app to move everything across.') + (lb ? ' Last backup: ' + L.dateLabel(lb) + ' ' + lb.slice(0, 4) + '.' : '') + '</p>' +
     '<div class="btns">' + (OFFLINE ? '<button class="btn" data-act="backup-share">Save backup file</button>' : '') + '<button class="btn ghost" data-act="backup-copy">Copy backup text</button><button class="btn ghost" data-act="export-csv">Export spreadsheet (CSV)</button></div></div></section>' + famHTML() +
     (S.profile.cardsTagged || demo ? '' : '<section><h2>Older entries</h2><div class="card pad stack"><p class="small muted">Your sheet listed which card paid for each entry. This adds those card names to your older entries, so the credit card totals include them.</p><div class="btns"><button class="btn" data-act="tag-cards">Add card names</button></div></div></section>') +
