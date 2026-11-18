@@ -664,6 +664,8 @@ html.sky[data-theme="light"] .card, html.sky[data-theme="light"] .fold { backgro
 html.sky[data-theme="light"] .chips3 > div { background: rgba(255, 255, 255, .45); }
 html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 
+.chart .hit { fill: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
 </style>
 </head>
 <body>
@@ -676,7 +678,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '17 Nov 05:30'; window.__BID__ = '2026-11-17 05:30:57'; window.__VER__ = 138; window.__NOTES__ = [{"v": 138, "date": "17 Nov", "title": "Choose how much you put back", "notes": ["The Wish list now has a Change button for how much you can put back each month", "All refill plans and wish plans use your amount. Leave it empty to use the estimate"]}, {"v": 137, "date": "17 Nov", "title": "Clearer refill plan", "notes": ["The refill plan now splits the amount evenly (for example 347 a month for 2 months) and states the total to put back"]}, {"v": 136, "date": "17 Nov", "title": "Clearer wish deadline", "notes": ["When the wish date is less than a month away, it now says the total needed and the days left, instead of 'per month for 1 month'"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '18 Nov 00:08'; window.__BID__ = '2026-11-18 00:08:21'; window.__VER__ = 139; window.__NOTES__ = [{"v": 139, "date": "18 Nov", "title": "Savings charts fixed and tappable", "notes": ["Total saved no longer draws a flat line for months with no dated history. Only months with real data are plotted", "Tap any month on either chart to see exact numbers for it", "The second chart now shows the change in your savings pots (deposits minus withdrawals), and shows spending only for months that have any"]}, {"v": 138, "date": "17 Nov", "title": "Choose how much you put back", "notes": ["The Wish list now has a Change button for how much you can put back each month", "All refill plans and wish plans use your amount. Leave it empty to use the estimate"]}, {"v": 137, "date": "17 Nov", "title": "Clearer refill plan", "notes": ["The refill plan now splits the amount evenly (for example 347 a month for 2 months) and states the total to put back"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3650,6 +3652,7 @@ function expectedItems() {
   });
   return { rows: rows, total: rows.reduce(function (s, r) { return s + r.amount; }, 0) };
 }
+let chartSel = { a: -1, b: -1 };
 function savingsChartsHTML() {
   ['Total saved', 'Left over each month', 'Savings pots'].forEach(function (k) { if (!(k in foldOpen)) foldOpen[k] = true; });
   const gs = S.profile.goals || [];
@@ -3658,42 +3661,63 @@ function savingsChartsHTML() {
   for (let i = 5; i >= 0; i--) keys.push(L.addMonths(viewKey, -i));
   const logs = [];
   gs.forEach(function (g) { (g.log || []).forEach(function (e) { if (e.d) logs.push({ d: e.d, a: Number(e.a) || 0 }); }); });
+  const firstLog = logs.length ? logs.reduce(function (m, e) { return e.d < m ? e.d : m; }, logs[0].d) : '';
+  const firstKey = firstLog ? L.periodKeyOf(firstLog) : '';
+  const nowK = L.periodKeyOf(L.today());
   const data = keys.map(function (k) {
     const R = L.periodRange(k), M = L.monthSummary(S.profile, S.months, k);
     const pool = Math.max(M.incomeEst, M.income);
     let moved = 0, after = 0;
     logs.forEach(function (e) { if (e.d >= R.start && e.d <= R.end) moved += e.a; if (e.d > R.end) after += e.a; });
-    return { k: k, left: pool > 0 ? pool - M.spent : 0, hasInc: pool > 0, moved: moved, bal: total - after };
+    const known = k === nowK || (firstKey && k >= firstKey && k <= nowK);
+    const hasSpend = M.spent > 0 || M.count > 0;
+    return { k: k, left: pool > 0 && hasSpend ? pool - M.spent : null, moved: known ? Math.round(moved * 100) / 100 : null, bal: known && k <= nowK ? Math.round((total - after) * 100) / 100 : null, future: k > nowK, hasInc: pool > 0 };
   });
+  const lab = function (k) { return L.monthLabel(k, true); };
   const W = 340, H = 168, ml = 44, mr = 8, mt = 12, mb = 22, ph = H - mt - mb, bw = (W - ml - mr) / 6;
-  /* chart A: total saved at the end of each month */
-  const maxB = niceCeil(Math.max.apply(null, data.map(function (d) { return d.bal; }).concat([1])));
-  const X = function (i) { return ml + i * bw + bw / 2; }, Y = function (v) { return mt + ph * (1 - Math.max(0, v) / maxB); };
+  const X = function (i) { return ml + i * bw + bw / 2; };
+  const pick = function (key, dflt) { let i = chartSel[key]; if (i < 0 || i > 5) i = dflt; return i; };
+  const dflt = Math.max(0, keys.indexOf(nowK) >= 0 ? keys.indexOf(nowK) : 5);
+  const iA = pick('a', dflt), iB = pick('b', dflt);
+  const hits = function (chart, sel) { let h = ''; for (let i = 0; i < 6; i++) h += '<rect class="hit" data-act="chart-pick" data-chart="' + chart + '" data-i="' + i + '" x="' + (ml + i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '"/>'; return h + '<line class="nowline" style="opacity:.5" x1="' + X(sel).toFixed(1) + '" x2="' + X(sel).toFixed(1) + '" y1="' + mt + '" y2="' + (mt + ph) + '"/>'; };
+  /* chart A: total saved at the end of each month (only months with dated history) */
+  const vals = data.map(function (d) { return d.bal; }).filter(function (v) { return v !== null; });
+  const maxB = niceCeil(Math.max.apply(null, vals.concat([1])));
+  const Y = function (v) { return mt + ph * (1 - Math.max(0, v) / maxB); };
   let a = '';
   [0, 0.5, 1].forEach(function (f) { const y = mt + ph * (1 - f); a += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (ml - 5) + '" y="' + (y + 3) + '" text-anchor="end">' + (f === 0 ? '0' : compact(maxB * f)) + '</text>'; });
-  const pts = data.map(function (d, i) { return X(i).toFixed(1) + ',' + Y(d.bal).toFixed(1); });
-  a += '<polygon class="area" points="' + X(0).toFixed(1) + ',' + Y(0).toFixed(1) + ' ' + pts.join(' ') + ' ' + X(5).toFixed(1) + ',' + Y(0).toFixed(1) + '"/><polyline class="runline" pathLength="1" points="' + pts.join(' ') + '"/>';
-  a += '<circle class="enddot" cx="' + X(5).toFixed(1) + '" cy="' + Y(data[5].bal).toFixed(1) + '" r="4"/>';
-  data.forEach(function (d, i) { a += '<text class="' + (d.k === viewKey ? 'cur' : '') + '" x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + L.monthLabel(d.k).slice(0, 3) + '</text>'; });
-  /* chart B: left over each month and moved to savings */
+  const idx = []; data.forEach(function (d, i) { if (d.bal !== null) idx.push(i); });
+  if (idx.length >= 2) {
+    const pts = idx.map(function (i) { return X(i).toFixed(1) + ',' + Y(data[i].bal).toFixed(1); });
+    a += '<polygon class="area" points="' + X(idx[0]).toFixed(1) + ',' + Y(0).toFixed(1) + ' ' + pts.join(' ') + ' ' + X(idx[idx.length - 1]).toFixed(1) + ',' + Y(0).toFixed(1) + '"/><polyline class="runline" points="' + pts.join(' ') + '"/>';
+  }
+  idx.forEach(function (i) { a += '<circle class="enddot" cx="' + X(i).toFixed(1) + '" cy="' + Y(data[i].bal).toFixed(1) + '" r="' + (i === iA ? 5 : 3) + '"/>'; });
+  data.forEach(function (d, i) { a += '<text class="' + (i === iA ? 'cur' : '') + '" x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + L.monthLabel(d.k).slice(0, 3) + '</text>'; });
+  a += hits('a', iA);
+  const dA = data[iA];
+  const readA = dA.bal === null ? '<b>' + lab(dA.k) + ':</b> no dated savings history for this month yet.' : '<b>' + lab(dA.k) + ':</b> ' + money(dA.bal, true) + ' saved at the end' + (dA.moved !== null ? (dA.moved >= 0 ? ', up ' : ', down ') + money(Math.abs(dA.moved), true) + ' during the month' : '') + '.';
+  /* chart B: left over each month and change in savings */
   let hi = 1, lo = 0;
-  data.forEach(function (d) { hi = Math.max(hi, d.left, d.moved); lo = Math.min(lo, d.left, d.moved); });
+  data.forEach(function (d) { [d.left, d.moved].forEach(function (v) { if (v !== null) { hi = Math.max(hi, v); lo = Math.min(lo, v); } }); });
   hi = niceCeil(hi); if (lo < 0) lo = -niceCeil(-lo);
   const Y2 = function (v) { return mt + ph * (1 - (v - lo) / (hi - lo)); };
   let b = '';
-  [lo, 0, hi].filter(function (v, i, arr) { return arr.indexOf(v) === i; }).forEach(function (v) { const y = Y2(v); b += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (ml - 5) + '" y="' + (y + 3) + '" text-anchor="end">' + (v === 0 ? '0' : compact(v)) + '</text>'; });
+  [lo, 0, hi].filter(function (v, i, arr) { return arr.indexOf(v) === i; }).forEach(function (v) { const y = Y2(v); b += '<line class="grid" x1="' + ml + '" x2="' + (W - mr) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (ml - 5) + '" y="' + (y + 3) + '" text-anchor="end">' + (v === 0 ? '0' : (v < 0 ? '-' : '') + compact(Math.abs(v))) + '</text>'; });
   const bwid = bw * 0.3;
   data.forEach(function (d, i) {
     const x0 = ml + i * bw + bw * 0.12, z = Y2(0);
-    const bar1 = function (v, x, cls) { const y = Y2(v); return v === 0 ? '' : '<rect class="' + cls + '" x="' + x.toFixed(1) + '" y="' + Math.min(y, z).toFixed(1) + '" width="' + bwid.toFixed(1) + '" height="' + Math.max(1, Math.abs(z - y)).toFixed(1) + '" rx="2"/>'; };
+    const bar1 = function (v, x, cls) { if (v === null || v === 0) return ''; const y = Y2(v); return '<rect class="' + cls + '" x="' + x.toFixed(1) + '" y="' + Math.min(y, z).toFixed(1) + '" width="' + bwid.toFixed(1) + '" height="' + Math.max(1, Math.abs(z - y)).toFixed(1) + '" rx="2"/>'; };
     b += bar1(d.left, x0, 'v') + bar1(d.moved, x0 + bwid + 2, 'f');
-    b += '<text class="' + (d.k === viewKey ? 'cur' : '') + '" x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + L.monthLabel(d.k).slice(0, 3) + '</text>';
+    b += '<text class="' + (i === iB ? 'cur' : '') + '" x="' + X(i).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + L.monthLabel(d.k).slice(0, 3) + '</text>';
   });
-  const cur = data[5];
+  b += hits('b', iB);
+  const dB = data[iB];
+  const readB = '<b>' + lab(dB.k) + ':</b> ' + (dB.left === null ? (dB.hasInc ? 'no spending logged' : 'no salary set') : (dB.left >= 0 ? money(dB.left, true) + ' left over' : money(-dB.left, true) + ' overspent')) + ' &middot; ' + (dB.moved === null ? 'no dated savings changes' : 'savings pots ' + (dB.moved >= 0 ? 'up ' : 'down ') + money(Math.abs(dB.moved), true)) + '.';
+  const note = firstKey && firstKey > keys[0] ? ' Earlier months are blank because your savings history has no dates before ' + lab(firstKey) + '.' : (!firstKey ? ' Your savings history has no dates yet, so only this month shows. It fills in as you add or move money.' : '');
   return '<section><h2>Total saved</h2><div class="card pad"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Total saved at the end of each of the last six months">' + a + '</svg>' +
-    '<p class="small muted">Money in your savings pots at the end of each month. Now: <b>' + money(total) + '</b>.</p></div></section>' +
-    '<section><h2>Left over each month</h2><div class="card pad"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Money left over each month and money moved to savings">' + b + '</svg>' +
-    '<p class="small muted"><span style="color:#4FD1FF">&#9632;</span> Income minus spending &nbsp; <span style="color:#9B8CFF">&#9632;</span> Moved to savings pots. ' + (cur.hasInc ? 'This month: ' + money(cur.left) + ' left, ' + money(cur.moved) + ' moved.' : 'Add your salary in Budget to see what is left.') + '</p></div></section>';
+    '<p class="small" style="margin:8px 0 4px">' + readA + '</p><p class="small muted">Tap a month. Money in your savings pots now: <b>' + money(total) + '</b>.' + note + '</p></div></section>' +
+    '<section><h2>Left over each month</h2><div class="card pad"><svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Money left over each month and change in savings">' + b + '</svg>' +
+    '<p class="small" style="margin:8px 0 4px">' + readB + '</p><p class="small muted"><span style="color:#4FD1FF">&#9632;</span> Income minus spending &nbsp; <span style="color:#9B8CFF">&#9632;</span> Change in savings pots (deposits minus withdrawals). Tap a month.</p></div></section>';
 }
 function savingsHTML() {
   const M = L.monthSummary(S.profile, S.months, viewKey);
@@ -4868,6 +4892,7 @@ function onAction(act, el) {
     }
     case 'new-goal': goalSheet(null); break;
     case 'edit-goal': goalSheet(el.dataset.id); break;
+    case 'chart-pick': chartSel[el.dataset.chart] = Number(el.dataset.i); render(); break;
     case 'wish-edit': wishSheet(el.dataset.id); break;
     case 'refill-rate': rateSheet(); break;
     case 'refill-rate-go': {
