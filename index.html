@@ -678,7 +678,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '18 Nov 00:11'; window.__BUILDMS__ = 1794989466896; window.__BID__ = '2026-11-18 00:11:06'; window.__VER__ = 140; window.__NOTES__ = [{"v": 140, "date": "18 Nov", "title": "Update time shown in your own time zone", "notes": ["The version line used the time zone of the computer that built the app, so it showed the wrong time. It now shows the time on your phone", "All other dates in the app already use your phone's date"]}, {"v": 139, "date": "18 Nov", "title": "Savings charts fixed and tappable", "notes": ["Total saved no longer draws a flat line for months with no dated history. Only months with real data are plotted", "Tap any month on either chart to see exact numbers for it", "The second chart now shows the change in your savings pots (deposits minus withdrawals), and shows spending only for months that have any"]}, {"v": 138, "date": "17 Nov", "title": "Choose how much you put back", "notes": ["The Wish list now has a Change button for how much you can put back each month", "All refill plans and wish plans use your amount. Leave it empty to use the estimate"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '20 Nov 05:25'; window.__BUILDMS__ = 1795181102191; window.__BID__ = '2026-11-20 05:25:02'; window.__VER__ = 141; window.__NOTES__ = [{"v": 141, "date": "20 Nov", "title": "See where received money went", "notes": ["Under Money you are expecting, Received recently now lists each item with the pots, new accounts and credit card bill it went to", "It also shows any part you did not place, so nothing disappears"]}, {"v": 140, "date": "18 Nov", "title": "Update time shown in your own time zone", "notes": ["The version line used the time zone of the computer that built the app, so it showed the wrong time. It now shows the time on your phone", "All other dates in the app already use your phone's date"]}, {"v": 139, "date": "18 Nov", "title": "Savings charts fixed and tappable", "notes": ["Total saved no longer draws a flat line for months with no dated history. Only months with real data are plotted", "Tap any month on either chart to see exact numbers for it", "The second chart now shows the change in your savings pots (deposits minus withdrawals), and shows spending only for months that have any"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3724,11 +3724,12 @@ function savingsChartsHTML() {
     '<p class="small" style="margin:8px 0 4px">' + readB + '</p><p class="small muted"><span style="color:#4FD1FF">&#9632;</span> Income minus spending &nbsp; <span style="color:#9B8CFF">&#9632;</span> Change in savings pots (deposits minus withdrawals). Tap a month.</p></div></section>';
 }
 function savingsHTML() {
+  if (!('Money you are expecting' in foldOpen)) foldOpen['Money you are expecting'] = true;
   const M = L.monthSummary(S.profile, S.months, viewKey);
   const gs = S.profile.goals || [];
   const total = gs.reduce(function (s, g) { return s + g.saved; }, 0);
   const exp = expectedItems();
-  const got = (S.profile.owed || []).filter(function (o) { return o.got; }).sort(function (a, b) { return a.got < b.got ? 1 : -1; }).slice(0, 5);
+  const got = (S.profile.owed || []).filter(function (o) { return o.got; }).sort(function (a, b) { return a.got < b.got ? 1 : -1; }).slice(0, 8);
   const potCard = function (g) {
     const log = (g.log || []).slice().sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
     return '<div class="goal" style="--h:' + hueOfName(g.name) + '"><div class="top-row"><span class="nm">' + esc(g.name) + '</span><span class="mono" style="font-size:20px">' + money(g.saved, true) + '</span></div>' +
@@ -3747,7 +3748,18 @@ function savingsHTML() {
     '<div class="card list">' + (exp.rows.length ? exp.rows.map(function (r) {
       return '<div class="tx"><span class="tx-main"><span class="tx-m">' + esc(r.name) + '</span><span class="tx-sub">' + esc(r.who || '') + (r.pot ? ' &middot; into ' + esc(potName(r.pot)) : '') + '</span></span><span style="display:flex;gap:10px;align-items:center"><span class="amt mono pos">+' + money(r.amount, true) + '</span><button class="btn sm ghost" data-act="' + (r.kind === 'owed' ? 'owed-edit' : 'edit-trip') + '" data-id="' + esc(r.id) + '">Edit</button><button class="btn sm ghost" data-act="' + (r.kind === 'owed' ? 'owed-got' : r.kind === 'allow' ? 'al-open' : 'pd-got') + '" data-id="' + esc(r.id) + '">Received</button></span></div>';
     }).join('') : '<div class="empty">Nothing expected. Add money someone owes you, like a returned advance.</div>') + '</div>' +
-    (got.length ? '<p class="small muted" style="margin-top:8px">Received recently: ' + got.map(function (o) { return esc(o.name) + ' ' + money(o.amount); }).join(', ') + '</p>' : '') + '</section>' +
+    (got.length ? '<h3 class="small muted" style="margin:12px 0 4px">Received recently</h3><div class="card list">' + got.map(function (o) {
+      const pl = (o.split || []).map(function (x) { return esc(potName(x[0])) + ' ' + money(x[1], true); });
+      if (o.newAcct) pl.push(esc(o.newAcct[0]) + ' ' + money(o.newAcct[1], true) + ' (new)');
+      if (o.ccPaid > 0) pl.push('credit card bill ' + money(o.ccPaid, true));
+      let placed = (o.split || []).reduce(function (t, x) { return t + x[1]; }, 0) + (o.newAcct ? o.newAcct[1] : 0) + (o.ccPaid || 0);
+      let where;
+      if (!pl.length) where = 'Went into ' + esc(potName(o.pot)) + (o.split ? '' : ' (older entry, no details kept)');
+      else where = 'Went to: ' + pl.join(', ');
+      const rest = Math.round((o.amount - placed) * 100) / 100;
+      if (pl.length && rest > 0.004) where += '. Not placed: ' + money(rest, true) + ' (still only in your bank)';
+      return '<div class="tx"><span class="tx-main"><span class="tx-m">' + esc(o.name) + '</span><span class="tx-sub">' + L.dateLabel(o.got) + ' &middot; ' + where + '</span></span><span class="amt mono pos">' + money(o.amount, true) + '</span></div>';
+    }).join('') + '</div>' : '') + '</section>' +
     '<section><p class="muted small">Expected money is not counted in your spending or your savings until you tap Received. Per diem comes from your trips.</p></section>';
 }
 function savingsHTML_old() {
@@ -5004,7 +5016,7 @@ function onAction(act, el) {
     case 'owed-split-go': {
       const o = (S.profile.owed || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (!o || o.got) break;
       const sp = readSplit(o.amount); if (!sp) break;
-      mutate(function () { o.got = L.today(); o.split = sp.parts.map(function (x) { return [x.g.id, x.v]; }); applySplit(sp, 'Received: ' + o.name); markProfile(); });
+      mutate(function () { o.got = L.today(); o.split = sp.parts.map(function (x) { return [x.g.id, x.v]; }); o.newAcct = sp.nn && sp.na > 0 ? [sp.nn, sp.na] : null; o.ccPaid = sp.cc ? sp.cc.v : 0; applySplit(sp, 'Received: ' + o.name); markProfile(); });
       closeSheet(); render(); toast('Added to your savings'); break;
     }
     case 'owed-got-old':
