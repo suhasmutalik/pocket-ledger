@@ -19,32 +19,21 @@
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; }
 
-#splash { --l1: #2BD29A; --l2: #B8F58A; position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #E9F5EF; transition: opacity .45s ease, visibility .45s; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  background: radial-gradient(70% 45% at 85% 8%, rgba(159,232,112,.26), transparent 70%), linear-gradient(160deg, #12372A 0%, #08140E 55%, #050A08 100%); }
-#splash.light { --l1: #14B27F; --l2: #63C73A; color: #11271D; background: radial-gradient(70% 45% at 85% 8%, rgba(120,214,120,.28), transparent 70%), linear-gradient(160deg, #F6FAF5 0%, #EAF3EC 60%, #E1EEE5 100%); }
+#splash { --ac: #2BD29A; position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #E8EEEB; background: #070B0A; transition: opacity .6s ease, visibility .6s; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; }
+#splash.light { --ac: #0E9B6C; color: #101614; background: #F5F6F4; }
 #splash.out { opacity: 0; visibility: hidden; }
-#splash svg { width: 236px; height: 176px; overflow: visible; animation: spIn .8s cubic-bezier(.2,.9,.3,1) both; }
-#splash .cd { fill: rgba(255,255,255,.07); stroke: rgba(255,255,255,.18); stroke-width: 1.5; }
-#splash.light .cd { fill: rgba(255,255,255,.7); stroke: rgba(20,60,40,.12); }
-#splash .gr { stroke: rgba(255,255,255,.08); stroke-width: 1; } #splash.light .gr { stroke: rgba(20,60,40,.08); }
-#splash .rv { animation: spRev 1.5s .55s cubic-bezier(.45,.05,.25,1) both; }
-#splash .ln { fill: none; stroke: url(#spL); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
-#splash .ar { fill: url(#spA); }
-#splash .dt { fill: var(--l2); opacity: 0; animation: spDot .5s 2s ease-out forwards; transform-origin: 190px 40px; }
-#splash .ring { fill: none; stroke: var(--l2); stroke-width: 2; opacity: 0; transform-origin: 190px 40px; animation: spRing 1.6s 2.1s ease-out infinite; }
-#splash .nm { font-size: 22px; font-weight: 650; letter-spacing: .2px; margin-top: 10px; opacity: 0; animation: spUp .7s 1s ease-out forwards; }
-#splash .tg { font-size: 12.5px; letter-spacing: .3px; opacity: 0; animation: spFade .7s 1.3s ease-out forwards; }
-#splash .bar { width: 110px; height: 3px; border-radius: 3px; margin-top: 16px; background: rgba(127,127,127,.22); overflow: hidden; opacity: 0; animation: spFade2 .4s 1.4s forwards; }
-#splash .bar i { display: block; height: 100%; width: 38%; border-radius: 3px; background: linear-gradient(90deg, var(--l1), var(--l2)); animation: spBar 1.3s ease-in-out infinite; }
-@keyframes spIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
-@keyframes spRev { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-@keyframes spDot { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: scale(1); } }
-@keyframes spRing { 0% { opacity: .7; transform: scale(.6); } 100% { opacity: 0; transform: scale(3); } }
-@keyframes spUp { from { transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes spFade { to { opacity: .62; } }
-@keyframes spFade2 { to { opacity: 1; } }
-@keyframes spBar { 0% { transform: translateX(-110%); } 100% { transform: translateX(270%); } }
-@media (prefers-reduced-motion: reduce) { #splash *, #splash { animation-duration: .01s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; } #splash .bar i { animation: none; } }
+#splash svg { width: 132px; height: 72px; overflow: visible; opacity: 0; animation: spFadeIn .9s .15s ease-out forwards; }
+#splash .hl { stroke: currentColor; stroke-opacity: .14; stroke-width: 1; }
+#splash .ln { fill: none; stroke: var(--ac); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 190; stroke-dashoffset: 190; animation: spDraw 1.6s .5s cubic-bezier(.5,.1,.2,1) forwards; }
+#splash .dt { fill: var(--ac); opacity: 0; animation: spFadeIn .5s 2s ease-out forwards; }
+#splash .nm { margin-top: 34px; font-size: 13px; font-weight: 500; letter-spacing: .34em; text-indent: .34em; opacity: 0; animation: spFadeIn .9s 1s ease-out forwards; }
+#splash .rl { margin-top: 16px; height: 1px; width: 0; background: currentColor; opacity: .28; animation: spRule 1.2s 1.4s cubic-bezier(.4,0,.2,1) forwards; }
+#splash .tg { margin-top: 14px; font-size: 9.5px; font-weight: 500; letter-spacing: .32em; text-indent: .32em; opacity: 0; animation: spFadeTg .9s 1.7s ease-out forwards; }
+@keyframes spFadeIn { to { opacity: 1; } }
+@keyframes spFadeTg { to { opacity: .42; } }
+@keyframes spDraw { to { stroke-dashoffset: 0; } }
+@keyframes spRule { to { width: 48px; } }
+@media (prefers-reduced-motion: reduce) { #splash *, #splash { animation-duration: .01s !important; animation-delay: 0s !important; } }
 /* Apple-style layout: grouped inset lists on a system-grey ground, large titles, frosted bars,
    one blue accent for everything tappable. Numbers use the system face with tabular figures. */
 :root {
@@ -696,7 +685,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 </style>
 </head>
 <body>
-<div id="splash" role="status" aria-label="Loading Pocket Ledger"><svg viewBox="0 0 236 176" aria-hidden="true"><defs><linearGradient id="spL" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="var(--l1)"/><stop offset="1" stop-color="var(--l2)"/></linearGradient><linearGradient id="spA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--l2)" stop-opacity=".38"/><stop offset="1" stop-color="var(--l2)" stop-opacity="0"/></linearGradient></defs><rect class="cd" x="8" y="8" width="220" height="160" rx="34"/><line class="gr" x1="34" x2="202" y1="60" y2="60"/><line class="gr" x1="34" x2="202" y1="96" y2="96"/><line class="gr" x1="34" x2="202" y1="132" y2="132"/><g class="rv"><path class="ar" d="M38 118 C64 118 70 86 94 90 C120 94 126 124 150 88 C166 64 176 54 190 40 L190 142 L38 142 Z"/><path class="ln" d="M38 118 C64 118 70 86 94 90 C120 94 126 124 150 88 C166 64 176 54 190 40"/></g><circle class="ring" cx="190" cy="40" r="7"/><circle class="dt" cx="190" cy="40" r="7"/></svg><div class="nm">Pocket Ledger</div><div class="tg">Every euro, accounted for</div><div class="bar"><i></i></div></div>
+<div id="splash" role="status" aria-label="Loading Pocket Ledger"><svg viewBox="0 0 132 72" aria-hidden="true"><line class="hl" x1="0" x2="132" y1="12" y2="12"/><line class="hl" x1="0" x2="132" y1="36" y2="36"/><line class="hl" x1="0" x2="132" y1="60" y2="60"/><polyline class="ln" points="6,56 32,46 50,50 76,28 98,34 124,10"/><circle class="dt" cx="124" cy="10" r="2.8"/></svg><div class="nm">POCKET LEDGER</div><div class="rl"></div><div class="tg">PERSONAL FINANCE</div></div>
 <script>(function(){try{var s=document.getElementById('splash'),t=localStorage.getItem('pl-theme')||'auto',h=new Date().getHours(),l=t==='light'||(t==='sky'&&h>=7&&h<19)||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches);if(l)s.className='light';window.__SPLASH0__=Date.now();setTimeout(function(){var e=document.getElementById('splash');if(e)e.parentNode.removeChild(e)},9000)}catch(e){}})();</script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="gFix" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--fixed)"/><stop offset="1" style="stop-color:var(--fixed);stop-opacity:.6"/></linearGradient><linearGradient id="gVar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--var)"/><stop offset="1" style="stop-color:var(--var);stop-opacity:.6"/></linearGradient><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.38"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/></linearGradient></defs></svg>
 <header class="top"><div class="wrap topin">
@@ -707,7 +696,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 13:03'; window.__BUILDMS__ = 1795295023310; window.__BID__ = '2026-11-21 13:03:43'; window.__VER__ = 149; window.__NOTES__ = [{"v": 149, "date": "21 Nov", "title": "Launch screen in the app's own style", "notes": ["No character. The launch screen now uses the app's own deep green, the mint to lime chart line from the app icon, and a glass card", "The line draws itself across the card and ends in a pulsing dot, then the app fades in (about three seconds)"]}, {"v": 148, "date": "21 Nov", "title": "Launch screen a bit longer", "notes": ["The launch screen now stays about one second longer (around 3.6 seconds)"]}, {"v": 147, "date": "21 Nov", "title": "Launch screen with a person, slower", "notes": ["The coin is replaced by a friendly person holding a euro notebook", "The launch screen now stays about two and a half seconds so you can see it, then fades out"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 13:05'; window.__BUILDMS__ = 1795295109321; window.__BID__ = '2026-11-21 13:05:09'; window.__VER__ = 150; window.__NOTES__ = [{"v": 150, "date": "21 Nov", "title": "Calmer, more serious launch screen", "notes": ["The launch screen is now minimal: a thin chart line over ledger rules, the name in spaced capitals, and a hairline underneath", "No thick shapes, glows or bars. It stays about three seconds and fades out slowly"]}, {"v": 149, "date": "21 Nov", "title": "Launch screen in the app's own style", "notes": ["No character. The launch screen now uses the app's own deep green, the mint to lime chart line from the app icon, and a glass card", "The line draws itself across the card and ends in a pulsing dot, then the app fades in (about three seconds)"]}, {"v": 148, "date": "21 Nov", "title": "Launch screen a bit longer", "notes": ["The launch screen now stays about one second longer (around 3.6 seconds)"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -6000,8 +5989,8 @@ async function boot() {
 }
 function hideSplash() {
   const e = document.getElementById('splash'); if (!e) return;
-  const wait = Math.max(0, 3400 - (Date.now() - (window.__SPLASH0__ || Date.now())));
-  setTimeout(function () { e.classList.add('out'); setTimeout(function () { if (e.parentNode) e.parentNode.removeChild(e); }, 450); }, wait);
+  const wait = Math.max(0, 3000 - (Date.now() - (window.__SPLASH0__ || Date.now())));
+  setTimeout(function () { e.classList.add('out'); setTimeout(function () { if (e.parentNode) e.parentNode.removeChild(e); }, 700); }, wait);
 }
 boot();
 })();
