@@ -1,1 +1,1 @@
-{"bid": "2026-11-21 12:58:50", "v": 146, "title": "Friendlier launch screen", "notes": ["The launch screen now has a small coin character who hops, blinks and gets a euro badge, on a calm light or dark background", "Still pure CSS, so it launches just as fast"]}
+{"bid": "2026-11-21 13:00:55", "v": 147, "title": "Launch screen with a person, slower", "notes": ["The coin is replaced by a friendly person holding a euro notebook", "The launch screen now stays about two and a half seconds so you can see it, then fades out"]}
