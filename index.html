@@ -678,7 +678,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 08:55'; window.__BUILDMS__ = 1795280157142; window.__BID__ = '2026-11-21 08:55:57'; window.__VER__ = 142; window.__NOTES__ = [{"v": 142, "date": "21 Nov", "title": "Upcoming trips", "notes": ["A trip that starts in the future now shows under Upcoming trips, with the days left, instead of Ended", "Trips now show the year when it is not this year", "A trip is only called Ended after its last day has passed"]}, {"v": 141, "date": "20 Nov", "title": "See where received money went", "notes": ["Under Money you are expecting, Received recently now lists each item with the pots, new accounts and credit card bill it went to", "It also shows any part you did not place, so nothing disappears"]}, {"v": 140, "date": "18 Nov", "title": "Update time shown in your own time zone", "notes": ["The version line used the time zone of the computer that built the app, so it showed the wrong time. It now shows the time on your phone", "All other dates in the app already use your phone's date"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 10:14'; window.__BUILDMS__ = 1795284889687; window.__BID__ = '2026-11-21 10:14:49'; window.__VER__ = 143; window.__NOTES__ = [{"v": 143, "date": "21 Nov", "title": "Spending linked to savings pots", "notes": ["Paid from a savings pot is now a visible choice when you add or edit spending, not hidden in a fold", "Spending paid from a pot shows a tag with the pot name. Tap it to jump to that pot", "Each pot has a list of the spending paid from it. Tap an entry to open it"]}, {"v": 142, "date": "21 Nov", "title": "Upcoming trips", "notes": ["A trip that starts in the future now shows under Upcoming trips, with the days left, instead of Ended", "Trips now show the year when it is not this year", "A trip is only called Ended after its last day has passed"]}, {"v": 141, "date": "20 Nov", "title": "See where received money went", "notes": ["Under Money you are expecting, Received recently now lists each item with the pots, new accounts and credit card bill it went to", "It also shows any part you did not place, so nothing disappears"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2445,10 +2445,9 @@ function potGive(t) {
 const ACCTS = [['ING Betaalpas', 'ING current account'], ['ABN AMRO bank', 'ABN AMRO bank account'], ['ABN AMRO Credit Card', 'ABN credit card (7764)']];
 function tripExtraHTML(pre, t) {
   const goals = S.profile.goals || [];
-  return '<details class="fold"' + (t && (t.reimb || t.fund) ? ' open' : '') + '><summary class="small" style="cursor:pointer">More: paid back, or from savings</summary><div class="stack" style="margin-top:8px">' +
-
+  return (goals.length ? '<label>Paid from a savings pot<select id="' + pre + '-fund"><option value="">No, normal spending</option>' + goals.map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'g:' + g.id ? ' selected' : '') + '>' + esc(g.name) + ' (now ' + money(g.saved) + ')</option>'; }).join('') + '</select></label>' : '') +
+    '<details class="fold"' + (t && t.reimb ? ' open' : '') + '><summary class="small" style="cursor:pointer">More: paid back by employer</summary><div class="stack" style="margin-top:8px">' +
     '<label class="inline"><input type="checkbox" id="' + pre + '-rb"' + (t && t.reimb ? ' checked' : '') + '> Employer pays this back (Uber, eSIM, train...)</label>' +
-    (goals.length ? '<label>Or take it from savings<select id="' + pre + '-fund"><option value="">No, it is normal spending</option>' + goals.map(function (g) { return '<option value="g:' + esc(g.id) + '"' + (t && t.fund === 'g:' + g.id ? ' selected' : '') + '>' + esc(g.name) + ' (savings, ' + money(g.saved) + ')</option>'; }).join('') + '</select></label><p class="small muted">The amount leaves that savings pot and does not count against your salary.</p>' : '') +
     '</div></details>';
 }
 function addTx(t) {
@@ -2714,7 +2713,7 @@ function catIcon(t) {
 function txRow(t) {
   const inc = t.c === 'Income';
   return '<button class="tx" data-act="edit-tx" data-id="' + esc(t.id) + '">' + catIcon(t) + '<span class="tx-main"><span class="tx-m">' + esc(t.m) + '</span>' +
-    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.reimb ? '<span class="tag">Paid back</span>' : '') + (t.fundDone ? '<span class="tag">From savings</span>' : '') + (t.card ? '<span class="tag">' + (L.isCredit(S.profile, t.card) ? 'Credit card' : esc(t.card)) + '</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.c === 'Income' && t.it && t.it !== 'base' ? '<span class="tag">' + incomeTypeName(t.it) + '</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
+    '<span class="tx-sub">' + L.dateLabel(t.d) + ' &middot; <span class="chip">' + esc(t.c) + '</span>' + (t.src === 'tap' ? '<span class="tag">Apple Pay</span>' : '') + (t.reimb ? '<span class="tag">Paid back</span>' : '') + (t.fundDone ? '<span class="tag" data-act="goto-pot" data-id="' + esc((t.fund || '').slice(2)) + '">From ' + esc(potName((t.fund || '').slice(2))) + ' &rsaquo;</span>' : '') + (t.card ? '<span class="tag">' + (L.isCredit(S.profile, t.card) ? 'Credit card' : esc(t.card)) + '</span>' : '') + (t.src === 'bill' ? '<span class="tag">Bill</span>' : '') + (t.c === 'Income' && t.it && t.it !== 'base' ? '<span class="tag">' + incomeTypeName(t.it) + '</span>' : '') + (t.tr ? '<span class="tag">Trip</span>' : '') + '</span></span>' +
     '<span class="amt mono' + (t.a < 0 ? ' pos' : '') + '">' + (t.a < 0 ? '+' : '') + money(Math.abs(t.a), true) + (t.oc ? '<span class="tx-sub" style="display:block;text-align:right">' + esc(t.oc) + ' ' + Number(t.oa).toFixed(2) + '</span>' : '') + '</span></button>';
 }
 
@@ -3660,7 +3659,7 @@ function expectedItems() {
   });
   return { rows: rows, total: rows.reduce(function (s, r) { return s + r.amount; }, 0) };
 }
-let chartSel = { a: -1, b: -1 };
+let chartSel = { a: -1, b: -1 }, potOpen = '';
 function savingsChartsHTML() {
   ['Total saved', 'Left over each month', 'Savings pots'].forEach(function (k) { if (!(k in foldOpen)) foldOpen[k] = true; });
   const gs = S.profile.goals || [];
@@ -3739,6 +3738,12 @@ function savingsHTML() {
     return '<div class="goal" style="--h:' + hueOfName(g.name) + '"><div class="top-row"><span class="nm">' + esc(g.name) + '</span><span class="mono" style="font-size:20px">' + money(g.saved, true) + '</span></div>' +
       (g.target > 0 ? bar(pct(g.saved, g.target), 'good') + '<div class="top-row"><span class="mono small">' + Math.round(pct(g.saved, g.target)) + '% of ' + money(g.target) + '</span><span class="muted small">' + goalProgress(g) + '</span></div>' : '') +
       '<div class="btns"><button class="btn sm" data-act="deposit" data-id="' + esc(g.id) + '">Add or withdraw</button><button class="btn sm ghost" data-act="xfer" data-id="' + esc(g.id) + '">Move to another pot</button><button class="btn sm ghost" data-act="edit-goal" data-id="' + esc(g.id) + '">Edit</button></div>' +
+      (function () {
+        const sp2 = allTx().filter(function (t) { return t.fundDone && t.fund === 'g:' + g.id; }).sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+        if (!sp2.length) return '';
+        const sum = sp2.reduce(function (t, x) { return t + (x.fundAmt || x.a || 0); }, 0);
+        return '<details' + (potOpen === g.id ? ' open' : '') + '><summary class="small muted" style="cursor:pointer">Spending paid from this pot (' + sp2.length + ', ' + money(sum, true) + ')</summary><div class="list" style="margin-top:6px">' + sp2.slice(0, 30).map(txRow).join('') + '</div></details>';
+      })() +
       (log.length ? '<details><summary class="small muted" style="cursor:pointer">History (' + log.length + ')</summary><div class="list" style="margin-top:6px">' + log.slice(0, 30).map(function (e) {
         return '<div class="tx" style="padding:8px 0;min-height:0"><span class="tx-main"><span class="tx-m">' + esc(e.n || (e.a > 0 ? 'Added' : 'Withdrawn')) + '</span><span class="tx-sub">' + L.dateLabel(e.d) + '</span></span><span class="amt mono' + (e.a > 0 ? ' pos' : '') + '">' + (e.a > 0 ? '+' : '') + money(e.a, true) + '</span></div>';
       }).join('') + '</div></details>' : '') + '</div>';
@@ -4912,6 +4917,7 @@ function onAction(act, el) {
     }
     case 'new-goal': goalSheet(null); break;
     case 'edit-goal': goalSheet(el.dataset.id); break;
+    case 'goto-pot': potOpen = el.dataset.id; setTab('savings'); setTimeout(function () { const e = document.querySelector('.goal details[open]'); if (e) e.scrollIntoView({ block: 'center' }); }, 120); break;
     case 'chart-pick': chartSel[el.dataset.chart] = Number(el.dataset.i); render(); break;
     case 'wish-edit': wishSheet(el.dataset.id); break;
     case 'refill-rate': rateSheet(); break;
