@@ -19,15 +19,15 @@
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; }
 
-#splash { --ac: #2BD29A; position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #E8EEEB; background: #070B0A; transition: opacity .6s ease, visibility .6s; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; }
-#splash.light { --ac: #0E9B6C; color: #101614; background: #F5F6F4; }
+#splash { --b: rgba(255,255,255,.5); --h: #FFFFFF; position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #000; transition: opacity .8s ease, visibility .8s; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; }
+#splash.light { --b: rgba(16,22,20,.5); --h: #000000; background: #FFFFFF; }
 #splash.out { opacity: 0; visibility: hidden; }
-#splash .eu { font-size: 84px; font-weight: 200; line-height: 1; opacity: 0; transform: translateY(4px); animation: spIn 1s .2s ease-out forwards; }
-#splash .ld { margin-top: 38px; width: 64px; height: 2px; border-radius: 2px; background: rgba(127,127,127,.25); overflow: hidden; position: relative; }
-#splash .ld i { position: absolute; inset: 0; background: var(--ac); transform: translateX(-100%); animation: spLoad 2.6s .5s cubic-bezier(.35,.1,.2,1) forwards; }
-@keyframes spIn { to { opacity: 1; transform: none; } }
-@keyframes spLoad { to { transform: translateX(0); } }
-@media (prefers-reduced-motion: reduce) { #splash *, #splash { animation-duration: .01s !important; animation-delay: 0s !important; } }
+#splash .nm { position: relative; font-size: 38px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; white-space: nowrap; color: var(--b); opacity: 0; filter: blur(8px); animation: spIn 1.4s .3s cubic-bezier(.2,.7,.2,1) forwards, spSet 1.4s 2.1s ease-in-out forwards; }
+#splash .nm::after { content: attr(data-t); position: absolute; left: 0; top: 0; color: transparent; background: linear-gradient(105deg, transparent 38%, var(--h) 50%, transparent 62%) 100% 0 / 280% 100% no-repeat; -webkit-background-clip: text; background-clip: text; animation: spShine 2.2s .9s cubic-bezier(.45,.05,.3,1) forwards; }
+@keyframes spIn { to { opacity: 1; filter: blur(0); } }
+@keyframes spSet { to { color: var(--h); } }
+@keyframes spShine { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@media (prefers-reduced-motion: reduce) { #splash .nm { animation-duration: .01s !important; animation-delay: 0s !important; } }
 /* Apple-style layout: grouped inset lists on a system-grey ground, large titles, frosted bars,
    one blue accent for everything tappable. Numbers use the system face with tabular figures. */
 :root {
@@ -679,7 +679,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 </style>
 </head>
 <body>
-<div id="splash" role="status" aria-label="Loading Pocket Ledger"><div class="eu" aria-hidden="true">&euro;</div><div class="ld"><i></i></div></div>
+<div id="splash" role="status" aria-label="Loading Pocket Ledger"><div class="nm" data-t="Pocket Ledger">Pocket Ledger</div></div>
 <script>(function(){try{var s=document.getElementById('splash'),t=localStorage.getItem('pl-theme')||'auto',h=new Date().getHours(),l=t==='light'||(t==='sky'&&h>=7&&h<19)||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches);if(l)s.className='light';window.__SPLASH0__=Date.now();setTimeout(function(){var e=document.getElementById('splash');if(e)e.parentNode.removeChild(e)},9000)}catch(e){}})();</script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="gFix" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--fixed)"/><stop offset="1" style="stop-color:var(--fixed);stop-opacity:.6"/></linearGradient><linearGradient id="gVar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--var)"/><stop offset="1" style="stop-color:var(--var);stop-opacity:.6"/></linearGradient><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.38"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/></linearGradient></defs></svg>
 <header class="top"><div class="wrap topin">
@@ -690,7 +690,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 13:07'; window.__BUILDMS__ = 1795295224515; window.__BID__ = '2026-11-21 13:07:04'; window.__VER__ = 151; window.__NOTES__ = [{"v": 151, "date": "21 Nov", "title": "Plain launch screen", "notes": ["The launch screen is now just a thin euro sign and a thin loading line that fills, in your light or dark theme"]}, {"v": 150, "date": "21 Nov", "title": "Calmer, more serious launch screen", "notes": ["The launch screen is now minimal: a thin chart line over ledger rules, the name in spaced capitals, and a hairline underneath", "No thick shapes, glows or bars. It stays about three seconds and fades out slowly"]}, {"v": 149, "date": "21 Nov", "title": "Launch screen in the app's own style", "notes": ["No character. The launch screen now uses the app's own deep green, the mint to lime chart line from the app icon, and a glass card", "The line draws itself across the card and ends in a pulsing dot, then the app fades in (about three seconds)"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 13:13'; window.__BUILDMS__ = 1795295628535; window.__BID__ = '2026-11-21 13:13:48'; window.__VER__ = 152; window.__NOTES__ = [{"v": 152, "date": "21 Nov", "title": "Cinematic launch screen", "notes": ["The launch screen is now a black screen where the name Pocket Ledger fades into focus and a soft light sweeps across it, then it fades into the app", "In light theme the same thing happens on white"]}, {"v": 151, "date": "21 Nov", "title": "Plain launch screen", "notes": ["The launch screen is now just a thin euro sign and a thin loading line that fills, in your light or dark theme"]}, {"v": 150, "date": "21 Nov", "title": "Calmer, more serious launch screen", "notes": ["The launch screen is now minimal: a thin chart line over ledger rules, the name in spaced capitals, and a hairline underneath", "No thick shapes, glows or bars. It stays about three seconds and fades out slowly"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -5866,7 +5866,7 @@ function tidyOnce() {
     if (S.profile.reimbKeys.indexOf('saily') < 0) S.profile.reimbKeys.push('saily');
     S.profile.tidy = 1; markProfile();
   });
-  if (n) setTimeout(function () { toast('Tidied ' + n + ' entries: Saily marked as paid back, Wise top-up and double bank fees removed'); render(); }, 700);
+  if (n) setTimeout(function () { toast('Tidied ' + n + ' entries: Saily marked as paid back, Wise top-up and double bank fees removed'); render(); }, 900);
 }
 function tidyTwo() {
   if (demo || VIEWING || (S.profile.tidy || 0) >= 2) return;
@@ -5983,7 +5983,7 @@ async function boot() {
 }
 function hideSplash() {
   const e = document.getElementById('splash'); if (!e) return;
-  const wait = Math.max(0, 3200 - (Date.now() - (window.__SPLASH0__ || Date.now())));
+  const wait = Math.max(0, 3600 - (Date.now() - (window.__SPLASH0__ || Date.now())));
   setTimeout(function () { e.classList.add('out'); setTimeout(function () { if (e.parentNode) e.parentNode.removeChild(e); }, 700); }, wait);
 }
 boot();
