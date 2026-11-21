@@ -678,7 +678,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '20 Nov 05:25'; window.__BUILDMS__ = 1795181102191; window.__BID__ = '2026-11-20 05:25:02'; window.__VER__ = 141; window.__NOTES__ = [{"v": 141, "date": "20 Nov", "title": "See where received money went", "notes": ["Under Money you are expecting, Received recently now lists each item with the pots, new accounts and credit card bill it went to", "It also shows any part you did not place, so nothing disappears"]}, {"v": 140, "date": "18 Nov", "title": "Update time shown in your own time zone", "notes": ["The version line used the time zone of the computer that built the app, so it showed the wrong time. It now shows the time on your phone", "All other dates in the app already use your phone's date"]}, {"v": 139, "date": "18 Nov", "title": "Savings charts fixed and tappable", "notes": ["Total saved no longer draws a flat line for months with no dated history. Only months with real data are plotted", "Tap any month on either chart to see exact numbers for it", "The second chart now shows the change in your savings pots (deposits minus withdrawals), and shows spending only for months that have any"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 08:55'; window.__BUILDMS__ = 1795280157142; window.__BID__ = '2026-11-21 08:55:57'; window.__VER__ = 142; window.__NOTES__ = [{"v": 142, "date": "21 Nov", "title": "Upcoming trips", "notes": ["A trip that starts in the future now shows under Upcoming trips, with the days left, instead of Ended", "Trips now show the year when it is not this year", "A trip is only called Ended after its last day has passed"]}, {"v": 141, "date": "20 Nov", "title": "See where received money went", "notes": ["Under Money you are expecting, Received recently now lists each item with the pots, new accounts and credit card bill it went to", "It also shows any part you did not place, so nothing disappears"]}, {"v": 140, "date": "18 Nov", "title": "Update time shown in your own time zone", "notes": ["The version line used the time zone of the computer that built the app, so it showed the wrong time. It now shows the time on your phone", "All other dates in the app already use your phone's date"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3565,8 +3565,11 @@ function billsHTML() {
 }
 function tripsHTML() {
   const trips = (S.profile.trips || []).slice().sort(function (a, b) { return a.start < b.start ? 1 : a.start > b.start ? -1 : 0; });
-  const act = trips.filter(function (t) { return !t.end; });
-  const past = trips.filter(function (t) { return t.end; });
+  const td = L.today(), tl = function (d) { return L.dateLabel(d) + (d.slice(0, 4) !== td.slice(0, 4) ? ' ' + d.slice(0, 4) : ''); };
+  const isUp = function (t) { return t.start > td; };
+  const act = trips.filter(function (t) { return !isUp(t) && (!t.end || t.end >= td); });
+  const up = trips.filter(isUp).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+  const past = trips.filter(function (t) { return !isUp(t) && t.end && t.end < td; });
   const card = function (t) {
     const T = L.tripSummary(S.months, t, L.today());
     const personal = t.kind === 'personal';
@@ -3578,7 +3581,7 @@ function tripsHTML() {
     txs.sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
     return '<div class="card">' +
       '<div class="pad stack"><div class="sec-head"><h3>' + esc(t.name) + '</h3><span><button class="link" data-act="edit-trip" data-id="' + esc(t.id) + '">Edit</button>' + (t.end ? '' : ' <button class="link" data-act="end-trip" data-id="' + esc(t.id) + '">End trip</button>') + '</span></div>' +
-      '<div class="pill ' + (t.end ? '' : 'good') + '" style="align-self:flex-start">' + (t.end ? 'Ended &middot; ' + L.dateLabel(t.start) + ' to ' + L.dateLabel(t.end) : 'Open since ' + L.dateLabel(t.start) + (t.auto ? ' &middot; automatic' : '')) + '</div>' +
+      '<div class="pill ' + (isUp(t) || !(t.end && t.end < td) ? 'good' : '') + '" style="align-self:flex-start">' + (isUp(t) ? 'Upcoming &middot; starts ' + tl(t.start) + ' (in ' + L.daysBetween(td, t.start) + ' days)' + (t.end ? ' &middot; until ' + tl(t.end) : '') : t.end && t.end < td ? 'Ended &middot; ' + tl(t.start) + ' to ' + tl(t.end) : t.end ? 'Active &middot; ' + tl(t.start) + ' to ' + tl(t.end) : 'Open since ' + tl(t.start) + (t.auto ? ' &middot; automatic' : '')) + '</div>' +
       (t.cur !== S.profile.currency ? '<div class="pill info" style="align-self:flex-start">Total so far: about ' + money(T.spentHome) + '</div>' : '') + '<div class="muted small mono">' + (personal ? 'Personal' : 'Business') + ' &middot; ' + L.dateLabel(t.start) + (t.end ? ' to ' + L.dateLabel(t.end) : ' to today') + ' &middot; ' + T.days + (T.days === 1 ? ' day' : ' days') + ' &middot; ' + t.cur + '</div>' +
       '<div class="sums" style="margin:0 -14px"><div><span class="k">Spent</span><span class="v">' + moneyIn(T.spent, t.cur) + '</span></div><div><span class="k">' + (personal ? 'Budget' : 'Per diem') + '</span><span class="v">' + (hasPlan ? moneyIn(T.received, t.cur) : '\u2013') + '</span></div><div><span class="k">' + (over ? 'Over by' : 'Left') + '</span><span class="v" style="color:var(--' + (hasPlan ? (over ? 'bad' : 'good') : 'muted') + ')">' + (hasPlan ? moneyIn(Math.abs(T.left), t.cur) : '\u2013') + '</span></div></div>' +
       (hasPlan ? bar(pct(T.spent, T.received), over ? 'bad' : 'good') + '<div class="small muted mono">' + moneyIn(T.perDay, t.cur) + ' a day spent' + (personal ? '' : ' of ' + moneyIn(t.perDiem, t.pdCur || t.cur) + ' per diem') + ' &middot; about ' + money(T.spentHome) + '</div>' : '<div class="note">Set ' + (personal ? 'a budget' : 'your per diem per day') + ' (Edit) to see what is left. About ' + money(T.spentHome) + ' spent so far.</div>') +
@@ -3618,6 +3621,7 @@ function tripsHTML() {
   return '<section><div class="sec-head"><h2>' + (act.length ? 'Current trip' : 'Trips') + '</h2><button class="link" data-act="new-trip">Start a trip</button></div>' +
     '<p class="small muted">Trip spending and per diem stay out of your monthly budget. While a trip is active, quick adds and Apple Pay taps are logged in its currency.' + (hasFx ? '' : ' Set a second currency in Budget to log in dollars or another currency.') + '</p></section>' +
     (act.length ? '<section>' + act.map(card).join('') + '</section>' : '<section><div class="card empty">Not travelling. Log something in your second currency or tap Start a trip and it shows up here.</div></section>') +
+    (up.length ? '<section><h2>Upcoming trips</h2><div class="stack">' + up.map(card).join('') + '</div></section>' : '') +
     (past.length ? '<section><h2>Past trips</h2><div class="stack">' + past.map(card).join('') + '</div></section>' : '');
 }
 function goalProgress(g) {
