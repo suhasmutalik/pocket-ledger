@@ -1,1 +1,1 @@
-{"bid": "2026-11-21 13:01:54", "v": 148, "title": "Launch screen a bit longer", "notes": ["The launch screen now stays about one second longer (around 3.6 seconds)"]}
+{"bid": "2026-11-21 13:03:43", "v": 149, "title": "Launch screen in the app's own style", "notes": ["No character. The launch screen now uses the app's own deep green, the mint to lime chart line from the app icon, and a glass card", "The line draws itself across the card and ends in a pulsing dot, then the app fades in (about three seconds)"]}
