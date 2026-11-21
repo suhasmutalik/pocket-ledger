@@ -19,11 +19,11 @@
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; }
 
-#splash { --b: rgba(255,255,255,.5); --h: #FFFFFF; position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #000; transition: opacity .8s ease, visibility .8s; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; }
-#splash.light { --b: rgba(16,22,20,.5); --h: #000000; background: #FFFFFF; }
+#splash { --b: rgba(255,255,255,.5); --h: #FFFFFF; --c1: #FF7EB6; --c2: #FFB36B; --c3: #FFE680; --c4: #7DF0C0; --c5: #6FCBFF; --c6: #A78BFF; position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #000; transition: opacity .8s ease, visibility .8s; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; }
+#splash.light { --b: rgba(16,22,20,.5); --h: #000000; --c1: #E0307F; --c2: #E8761C; --c3: #C9A000; --c4: #12A872; --c5: #1A8FE0; --c6: #6A4DE0; background: #FFFFFF; }
 #splash.out { opacity: 0; visibility: hidden; }
 #splash .nm { position: relative; font-size: 38px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; white-space: nowrap; color: var(--b); opacity: 0; filter: blur(8px); animation: spIn 1.4s .3s cubic-bezier(.2,.7,.2,1) forwards, spSet 1.4s 2.1s ease-in-out forwards; }
-#splash .nm::after { content: attr(data-t); position: absolute; left: 0; top: 0; color: transparent; background: linear-gradient(105deg, transparent 38%, var(--h) 50%, transparent 62%) 100% 0 / 280% 100% no-repeat; -webkit-background-clip: text; background-clip: text; animation: spShine 2.2s .9s cubic-bezier(.45,.05,.3,1) forwards; }
+#splash .nm::after { content: attr(data-t); position: absolute; left: 0; top: 0; color: transparent; background: linear-gradient(105deg, transparent 30%, var(--c1) 38%, var(--c2) 43%, var(--c3) 47%, var(--h) 50%, var(--c4) 53%, var(--c5) 58%, var(--c6) 63%, transparent 70%) 100% 0 / 300% 100% no-repeat; -webkit-background-clip: text; background-clip: text; animation: spShine 2.2s .9s cubic-bezier(.45,.05,.3,1) forwards; }
 @keyframes spIn { to { opacity: 1; filter: blur(0); } }
 @keyframes spSet { to { color: var(--h); } }
 @keyframes spShine { from { background-position: 100% 0; } to { background-position: 0% 0; } }
@@ -690,7 +690,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 13:13'; window.__BUILDMS__ = 1795295628535; window.__BID__ = '2026-11-21 13:13:48'; window.__VER__ = 152; window.__NOTES__ = [{"v": 152, "date": "21 Nov", "title": "Cinematic launch screen", "notes": ["The launch screen is now a black screen where the name Pocket Ledger fades into focus and a soft light sweeps across it, then it fades into the app", "In light theme the same thing happens on white"]}, {"v": 151, "date": "21 Nov", "title": "Plain launch screen", "notes": ["The launch screen is now just a thin euro sign and a thin loading line that fills, in your light or dark theme"]}, {"v": 150, "date": "21 Nov", "title": "Calmer, more serious launch screen", "notes": ["The launch screen is now minimal: a thin chart line over ledger rules, the name in spaced capitals, and a hairline underneath", "No thick shapes, glows or bars. It stays about three seconds and fades out slowly"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '21 Nov 13:15'; window.__BUILDMS__ = 1795295750200; window.__BID__ = '2026-11-21 13:15:50'; window.__VER__ = 153; window.__NOTES__ = [{"v": 153, "date": "21 Nov", "title": "Colour sweep on the launch screen", "notes": ["The light that sweeps across the name now has the soft rainbow colours (pink, orange, yellow, mint, blue, violet), then settles to white"]}, {"v": 152, "date": "21 Nov", "title": "Cinematic launch screen", "notes": ["The launch screen is now a black screen where the name Pocket Ledger fades into focus and a soft light sweeps across it, then it fades into the app", "In light theme the same thing happens on white"]}, {"v": 151, "date": "21 Nov", "title": "Plain launch screen", "notes": ["The launch screen is now just a thin euro sign and a thin loading line that fills, in your light or dark theme"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
