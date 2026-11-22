@@ -690,7 +690,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '22 Nov 07:14'; window.__BUILDMS__ = 1795360454327; window.__BID__ = '2026-11-22 07:14:14'; window.__VER__ = 154; window.__NOTES__ = [{"v": 154, "date": "22 Nov", "title": "Status line fix", "notes": ["The line under the app name no longer stays on Loading after the app has opened. It now says Saved in this browser"]}, {"v": 153, "date": "21 Nov", "title": "Colour sweep on the launch screen", "notes": ["The light that sweeps across the name now has the soft rainbow colours (pink, orange, yellow, mint, blue, violet), then settles to white"]}, {"v": 152, "date": "21 Nov", "title": "Cinematic launch screen", "notes": ["The launch screen is now a black screen where the name Pocket Ledger fades into focus and a soft light sweeps across it, then it fades into the app", "In light theme the same thing happens on white"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '22 Nov 07:16'; window.__BUILDMS__ = 1795360589767; window.__BID__ = '2026-11-22 07:16:29'; window.__VER__ = 155; window.__NOTES__ = [{"v": 155, "date": "22 Nov", "title": "Overspending shown as negative", "notes": ["When you have spent more than your salary or budget, the big number on Summary now shows as negative, for example -\u20ac17.50, under Left from salary"]}, {"v": 154, "date": "22 Nov", "title": "Status line fix", "notes": ["The line under the app name no longer stays on Loading after the app has opened. It now says Saved in this browser"]}, {"v": 153, "date": "21 Nov", "title": "Colour sweep on the launch screen", "notes": ["The light that sweeps across the name now has the soft rainbow colours (pink, orange, yellow, mint, blue, violet), then settles to white"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2602,8 +2602,8 @@ function homeHTML() {
     const DSg = L.dailySeries(S.months, viewKey);
     const tot = Math.max(base, M.spent, 1);
     const wf = Math.min(100, M.fixedSpent / tot * 100), wv = Math.min(100 - wf, M.varSpent / tot * 100), wl = Math.max(0, Math.min(100 - wf - wv, left / tot * 100));
-    hero = '<div class="hcard ' + tone + '"><div class="eyebrow">' + (left >= 0 ? (bySalary ? 'Left from salary' : 'Left to spend') : (bySalary ? 'Over salary by' : 'Over budget by')) + ' &middot; ' + L.periodLabel(viewKey) + '</div>' +
-      '<div class="hnum mono"><span class="cnt" data-v="' + Math.abs(left).toFixed(2) + '">' + money(Math.abs(left)) + '</span></div>' +
+    hero = '<div class="hcard ' + tone + '"><div class="eyebrow">' + (bySalary ? 'Left from salary' : 'Left to spend') + ' &middot; ' + L.periodLabel(viewKey) + '</div>' +
+      '<div class="hnum mono">' + (left < -0.004 ? '<span>&minus;</span>' : '') + '<span class="cnt" data-v="' + Math.abs(left).toFixed(2) + '">' + money(Math.abs(left)) + '</span></div>' +
       '<div class="hsub">' + money(M.spent) + ' spent of ' + money(base) + (bySalary ? (cIn > 0 ? ' (salary + ' + money(cIn) + ' carried forward)' : ' salary') + (S.profile.incomeMax > base ? ' (up to ' + money(S.profile.incomeMax) + ')' : '') : ' budgeted') + '</div>' +
       (function () { const oo = Object.keys(S.profile.oneoff || {}).filter(function (c) { return S.profile.oneoff[c]; }); let tot = 0; L.txIn(S.months, viewKey).forEach(function (t) { if (!t.tr && t.a > 0 && oo.indexOf(t.c) >= 0) tot += t.a; }); return tot > 0.5 ? '<div class="hsub" style="margin-top:4px">Includes ' + money(tot) + ' of one-off costs</div>' : ''; })() +
       sparkSVG(DSg.days, L.today(), base, cur) +

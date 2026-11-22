@@ -1,1 +1,1 @@
-{"bid": "2026-11-22 07:14:14", "v": 154, "title": "Status line fix", "notes": ["The line under the app name no longer stays on Loading after the app has opened. It now says Saved in this browser"]}
+{"bid": "2026-11-22 07:16:29", "v": 155, "title": "Overspending shown as negative", "notes": ["When you have spent more than your salary or budget, the big number on Summary now shows as negative, for example -\u20ac17.50, under Left from salary"]}
