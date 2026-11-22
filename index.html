@@ -690,7 +690,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '22 Nov 07:16'; window.__BUILDMS__ = 1795360589767; window.__BID__ = '2026-11-22 07:16:29'; window.__VER__ = 155; window.__NOTES__ = [{"v": 155, "date": "22 Nov", "title": "Overspending shown as negative", "notes": ["When you have spent more than your salary or budget, the big number on Summary now shows as negative, for example -\u20ac17.50, under Left from salary"]}, {"v": 154, "date": "22 Nov", "title": "Status line fix", "notes": ["The line under the app name no longer stays on Loading after the app has opened. It now says Saved in this browser"]}, {"v": 153, "date": "21 Nov", "title": "Colour sweep on the launch screen", "notes": ["The light that sweeps across the name now has the soft rainbow colours (pink, orange, yellow, mint, blue, violet), then settles to white"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '22 Nov 08:25'; window.__BUILDMS__ = 1795364755512; window.__BID__ = '2026-11-22 08:25:55'; window.__VER__ = 156; window.__NOTES__ = [{"v": 156, "date": "22 Nov", "title": "Credit card payment covers new purchases", "notes": ["When you pay more than the statement, the extra now pays the new purchases made up to the day you paid", "Total you owe on the card now only counts purchases after that payment, for example today's", "A line shows what your payment already covered"]}, {"v": 155, "date": "22 Nov", "title": "Overspending shown as negative", "notes": ["When you have spent more than your salary or budget, the big number on Summary now shows as negative, for example -\u20ac17.50, under Left from salary"]}, {"v": 154, "date": "22 Nov", "title": "Status line fix", "notes": ["The line under the app name no longer stays on Loading after the app has opened. It now says Saved in this browser"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -1364,11 +1364,16 @@ function creditInfo(profile, months, todayStr) {
   const paidAmt = Math.round(pays.reduce(function (a, p) { return a + (Number(p.amount) || 0); }, 0) * 100) / 100;
   const flag = !!cfg.paid[gen];
   const remaining = flag ? 0 : Math.max(0, Math.round((st.total - paidAmt) * 100) / 100);
+  /* a payment bigger than the statement also pays new purchases made up to the day it was paid */
+  const excess = flag ? 0 : Math.max(0, Math.round((paidAmt - st.total) * 100) / 100);
+  const lastPay = pays.reduce(function (m, p) { return p.date && p.date > m ? p.date : m; }, '');
+  let coverable = 0; tx.forEach(function (t) { if (t.d >= open.from && t.d <= open.to && lastPay && t.d <= lastPay) coverable += Number(t.a) || 0; });
+  const covered = Math.min(excess, Math.round(coverable * 100) / 100);
   const stmtOut = { from: addDays(prevGen, 1 - lag), to: addDays(gen, -lag), total: st.total, count: st.count, due: due, key: gen, pays: pays, paidAmt: paidAmt, flag: flag, remaining: remaining,
     paid: flag || (st.total > 0 && remaining < 0.005), overdue: due < (todayStr || today()) && remaining >= 0.005 };
   return {
     any: tx.length > 0, billDay: cfg.billDay,
-    open: { from: open.from, to: open.to, total: o.total, count: o.count },
+    open: { from: open.from, to: open.to, total: o.total, count: o.count, covered: covered, extra: Math.round((excess - covered) * 100) / 100, owed: Math.max(0, Math.round((o.total - covered) * 100) / 100), payDate: lastPay },
     stmt: stmtOut
   };
 }
@@ -1857,7 +1862,7 @@ function bankCheck(profile, months, todayStr) {
   if (ci.any) {
     if (ci.stmt.remaining > 0 && ci.stmt.due <= until) cc.push({ name: 'Credit card statement of ' + dateLabel(ci.stmt.to), due: ci.stmt.due, amount: ci.stmt.remaining });
     const od = lastOfMonth(Number(ci.open.to.slice(0, 4)), Number(ci.open.to.slice(5, 7)));
-    if (ci.open.total > 0 && od <= until) cc.push({ name: 'Credit card, statement made ' + dateLabel(ci.open.to) + ' (so far)', due: od, amount: ci.open.total });
+    if (ci.open.owed > 0 && od <= until) cc.push({ name: 'Credit card, statement made ' + dateLabel(ci.open.to) + ' (so far)', due: od, amount: ci.open.owed });
   }
   const ccTotal = Math.round(cc.reduce(function (s, c) { return s + c.amount; }, 0) * 100) / 100;
   const need = Math.round((bills + ccTotal) * 100) / 100;
@@ -3461,9 +3466,11 @@ function creditHTML() {
   }
   return '<section><h2>Credit card</h2><div class="card pad stack">' + body +
     '<div class="row"><span>New purchases, next bill (' + lab(C.open.from) + ' to ' + lab(C.open.to) + ')</span><span class="mono"><b>' + money(C.open.total) + '</b></span></div>' +
+    (C.open.covered > 0 ? '<div class="row"><span>Already paid by your ' + L.dateLabel(C.open.payDate) + ' payment</span><span class="mono"><b>&minus;' + money(C.open.covered) + '</b></span></div>' : '') +
+    (C.open.extra > 0.004 ? '<div class="small muted">You paid ' + money(C.open.extra, true) + ' more than the statement and the purchases before ' + L.dateLabel(C.open.payDate) + '. It is not matched to any purchase yet.</div>' : '') +
     '<div class="small muted">' + C.open.count + (C.open.count === 1 ? ' payment' : ' payments') + '. The statement is made on day ' + C.billDay + ' and paid by the end of that month.</div>' +
     '<div class="btns"><button class="btn sm ghost" data-act="cc-check-open">Check against my statement</button></div>' +
-    '<div class="row" style="border-top:1px solid var(--line);padding-top:10px"><span><b>Total you owe on the card now</b><span class="small muted" style="display:block">' + (st.paid ? 'New purchases only' : 'Bill to pay + new purchases') + '</span></span><span class="mono"><b>' + money((st.paid ? 0 : st.remaining) + C.open.total) + '</b></span></div></div></section>';
+    '<div class="row" style="border-top:1px solid var(--line);padding-top:10px"><span><b>Total you owe on the card now</b><span class="small muted" style="display:block">' + (st.paid ? 'New purchases not yet paid' : 'Bill to pay + new purchases') + '</span></span><span class="mono"><b>' + money((st.paid ? 0 : st.remaining) + C.open.owed) + '</b></span></div></div></section>';
 }
 let CCK = null;
 function ccCardName() {
