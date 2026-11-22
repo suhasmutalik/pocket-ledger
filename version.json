@@ -1,1 +1,1 @@
-{"bid": "2026-11-21 13:15:50", "v": 153, "title": "Colour sweep on the launch screen", "notes": ["The light that sweeps across the name now has the soft rainbow colours (pink, orange, yellow, mint, blue, violet), then settles to white"]}
+{"bid": "2026-11-22 07:14:14", "v": 154, "title": "Status line fix", "notes": ["The line under the app name no longer stays on Loading after the app has opened. It now says Saved in this browser"]}
