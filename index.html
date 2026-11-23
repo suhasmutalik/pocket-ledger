@@ -21,6 +21,8 @@ body { margin: 0; }
 
 #splash { --b: rgba(255,255,255,.5); --h: #FFFFFF; --c1: #FF7EB6; --c2: #FFB36B; --c3: #FFE680; --c4: #7DF0C0; --c5: #6FCBFF; --c6: #A78BFF; position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #000; transition: opacity .8s ease, visibility .8s; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif; }
 #splash.light { --b: rgba(16,22,20,.5); --h: #000000; --c1: #E0307F; --c2: #E8761C; --c3: #C9A000; --c4: #12A872; --c5: #1A8FE0; --c6: #6A4DE0; background: #FFFFFF; }
+html[data-season="winter"] #splash { --c1: #C93343; --c2: #E8B54A; --c3: #F3DFA2; --c4: #4FC38A; --c5: #9FD8EE; --c6: #FFFFFF; background: #08130F; }
+html[data-season="winter"] #splash.light { --c1: #B3202F; --c2: #B88A22; --c3: #D8B24C; --c4: #1B6B4B; --c5: #3E7F9E; --c6: #8C2332; background: #EEF3F2; }
 #splash.out { opacity: 0; visibility: hidden; }
 #splash .nm { position: relative; font-size: 38px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; white-space: nowrap; color: var(--b); opacity: 0; filter: blur(8px); animation: spIn 1.4s .3s cubic-bezier(.2,.7,.2,1) forwards, spSet 1.4s 2.1s ease-in-out forwards; }
 #splash .nm::after { content: attr(data-t); position: absolute; left: 0; top: 0; color: transparent; background: linear-gradient(105deg, transparent 30%, var(--c1) 38%, var(--c2) 43%, var(--c3) 47%, var(--h) 50%, var(--c4) 53%, var(--c5) 58%, var(--c6) 63%, transparent 70%) 100% 0 / 300% 100% no-repeat; -webkit-background-clip: text; background-clip: text; animation: spShine 2.2s .9s cubic-bezier(.45,.05,.3,1) forwards; }
@@ -694,11 +696,48 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 .ccpaid .ccb { background: color-mix(in srgb, var(--good, #2f9e6b) 18%, transparent); color: var(--good, #2f9e6b); font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 6px; letter-spacing: .06em; }
 .ccpay .link, .ccpaid .link { font-size: 12px; }
 
+/* ===== Winter / Christmas skin (on by default, switch in Settings > Appearance) ===== */
+:root[data-season="winter"] {
+  --bg: #EEF3F2; --surface: #FFFFFF; --surface-2: #E6EEEC; --muted: #5B6B67; --line: rgba(20,60,50,.18);
+  --accent: #1B6B4B; --tint: rgba(27,107,75,.12); --fixed: #8C2332; --var: #3E7F9E;
+  --good: #1B7A4B; --warn: #A8741A; --bad: #B3202F;
+  --hero-fill: #1B6B4B; --hero-bg: #FFFFFF;
+  --glass: rgba(238,243,242,.8);
+}
+:root[data-season="winter"][data-theme="dark"] {
+  --bg: #08130F; --surface: #112119; --surface-2: #1A2E24; --muted: #93A89F; --line: rgba(150,200,175,.22);
+  --accent: #4FC38A; --tint: rgba(79,195,138,.2); --fixed: #E0707B; --var: #7FC4E0;
+  --good: #4FC38A; --warn: #E8B54A; --bad: #FF7A85;
+  --hero-bg: #112119; --hero-fill: #4FC38A; --hero-mut: #93A89F;
+  --glass: rgba(8,19,15,.8);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-season="winter"]:not([data-theme="light"]) {
+    --bg: #08130F; --surface: #112119; --surface-2: #1A2E24; --muted: #93A89F; --line: rgba(150,200,175,.22);
+    --accent: #4FC38A; --tint: rgba(79,195,138,.2); --fixed: #E0707B; --var: #7FC4E0;
+    --good: #4FC38A; --warn: #E8B54A; --bad: #FF7A85;
+    --hero-bg: #112119; --hero-fill: #4FC38A; --hero-mut: #93A89F;
+    --glass: rgba(8,19,15,.8);
+  }
+}
+/* gold + red ribbon under the top bar, and a gold hairline on the main hero */
+:root[data-season="winter"] body::before { box-shadow: inset 0 -2px 0 #C9A13B; }
+:root[data-season="winter"] .btn:not(.ghost) { background: #B3202F; color: #fff; }
+:root[data-season="winter"][data-theme="dark"] .btn:not(.ghost) { background: #C93343; }
+@media (prefers-color-scheme: dark) { :root[data-season="winter"]:not([data-theme="light"]) .btn:not(.ghost) { background: #C93343; } }
+/* quiet falling snow, behind content, never blocks taps */
+#snow { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+#snow i { position: absolute; top: -10px; width: var(--s); height: var(--s); border-radius: 50%; background: rgba(120,160,175,.55); left: var(--x); opacity: var(--o); animation: snowFall var(--d) linear var(--l) infinite; }
+:root[data-theme="dark"] #snow i { background: rgba(255,255,255,.8); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #snow i { background: rgba(255,255,255,.8); } }
+@keyframes snowFall { 0% { transform: translate3d(0,-10px,0); } 50% { transform: translate3d(var(--w),55vh,0); } 100% { transform: translate3d(0,105vh,0); } }
+@media (prefers-reduced-motion: reduce) { #snow { display: none; } }
+
 </style>
 </head>
 <body>
 <div id="splash" role="status" aria-label="Loading Pocket Ledger"><div class="nm" data-t="Pocket Ledger">Pocket Ledger</div></div>
-<script>(function(){try{var s=document.getElementById('splash'),t=localStorage.getItem('pl-theme')||'auto',h=new Date().getHours(),l=t==='light'||(t==='sky'&&h>=7&&h<19)||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches);if(l)s.className='light';window.__SPLASH0__=Date.now();setTimeout(function(){var e=document.getElementById('splash');if(e)e.parentNode.removeChild(e)},9000)}catch(e){}})();</script>
+<script>(function(){try{var s=document.getElementById('splash'),t=localStorage.getItem('pl-theme')||'auto',h=new Date().getHours(),l=t==='light'||(t==='sky'&&h>=7&&h<19)||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches);if(l)s.className='light';if(localStorage.getItem('pl-season')!=='off')document.documentElement.setAttribute('data-season','winter');window.__SPLASH0__=Date.now();setTimeout(function(){var e=document.getElementById('splash');if(e)e.parentNode.removeChild(e)},9000)}catch(e){}})();</script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="gFix" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--fixed)"/><stop offset="1" style="stop-color:var(--fixed);stop-opacity:.6"/></linearGradient><linearGradient id="gVar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--var)"/><stop offset="1" style="stop-color:var(--var);stop-opacity:.6"/></linearGradient><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.38"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/></linearGradient></defs></svg>
 <header class="top"><div class="wrap topin">
   <div class="brand"><img class="logo" alt="" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiPgo8ZGVmcz4KPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzEyMzcyQSIvPjxzdG9wIG9mZnNldD0iLjU1IiBzdG9wLWNvbG9yPSIjMDgxNDBFIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMDUwQTA4Ii8+PC9saW5lYXJHcmFkaWVudD4KPHJhZGlhbEdyYWRpZW50IGlkPSJnbCIgY3g9Ii44MiIgY3k9Ii4xNCIgcj0iLjciPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzlGRTg3MCIgc3RvcC1vcGFjaXR5PSIuNTUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM5RkU4NzAiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+CjxsaW5lYXJHcmFkaWVudCBpZD0ibG4iIHgxPSIwIiB5MT0iMSIgeDI9IjEiIHkyPSIwIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMyQkQyOUEiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNCOEY1OEEiLz48L2xpbmVhckdyYWRpZW50Pgo8bGluZWFyR3JhZGllbnQgaWQ9ImFyIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjOUZFODcwIiBzdG9wLW9wYWNpdHk9Ii41Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOUZFODcwIiBzdG9wLW9wYWNpdHk9IjAiLz48L2xpbmVhckdyYWRpZW50Pgo8bGluZWFyR3JhZGllbnQgaWQ9ImNkIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9Ii4xMiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMDMiLz48L2xpbmVhckdyYWRpZW50Pgo8ZmlsdGVyIGlkPSJndyIgeD0iLTUwJSIgeT0iLTUwJSIgd2lkdGg9IjIwMCUiIGhlaWdodD0iMjAwJSI+PGZlR2F1c3NpYW5CbHVyIHN0ZERldmlhdGlvbj0iMTgiLz48L2ZpbHRlcj4KPC9kZWZzPgo8cmVjdCB3aWR0aD0iMTAyNCIgaGVpZ2h0PSIxMDI0IiBmaWxsPSJ1cmwoI2JnKSIvPgo8cmVjdCB3aWR0aD0iMTAyNCIgaGVpZ2h0PSIxMDI0IiBmaWxsPSJ1cmwoI2dsKSIvPgo8cmVjdCB4PSIxNzYiIHk9IjI3NiIgd2lkdGg9IjY3MiIgaGVpZ2h0PSI0NzIiIHJ4PSIxMDQiIGZpbGw9InVybCgjY2QpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuMTYiIHN0cm9rZS13aWR0aD0iMyIvPgo8cGF0aCBkPSJNMjU2IDY0MCBDMzUwIDY0MCAzNjYgNTQwIDQ1NiA1NTYgQzU0OCA1NzQgNTY2IDY2MCA2NTAgNTQwIEM3MDYgNDYwIDc0MCA0MzYgNzkwIDM5MiBMNzkwIDY5NiBMMjU2IDY5NiBaIiBmaWxsPSJ1cmwoI2FyKSIvPgo8cGF0aCBkPSJNMjU2IDY0MCBDMzUwIDY0MCAzNjYgNTQwIDQ1NiA1NTYgQzU0OCA1NzQgNTY2IDY2MCA2NTAgNTQwIEM3MDYgNDYwIDc0MCA0MzYgNzkwIDM5MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOUZFODcwIiBzdHJva2Utb3BhY2l0eT0iLjU1IiBzdHJva2Utd2lkdGg9IjQ0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIGZpbHRlcj0idXJsKCNndykiLz4KPHBhdGggZD0iTTI1NiA2NDAgQzM1MCA2NDAgMzY2IDU0MCA0NTYgNTU2IEM1NDggNTc0IDU2NiA2NjAgNjUwIDU0MCBDNzA2IDQ2MCA3NDAgNDM2IDc5MCAzOTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNsbikiIHN0cm9rZS13aWR0aD0iMzQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8Y2lyY2xlIGN4PSI3OTAiIGN5PSIzOTIiIHI9IjU4IiBmaWxsPSIjOUZFODcwIiBmaWxsLW9wYWNpdHk9Ii4yNSIvPgo8Y2lyY2xlIGN4PSI3OTAiIGN5PSIzOTIiIHI9IjMwIiBmaWxsPSIjRTZGRkQwIiBzdHJva2U9IiM5RkU4NzAiIHN0cm9rZS13aWR0aD0iMTAiLz4KPC9zdmc+Cg=="><span class="bt">Pocket Ledger<small id="savenote"></small></span></div>
@@ -708,7 +747,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '22 Nov 08:31'; window.__BUILDMS__ = 1795365084717; window.__BID__ = '2026-11-22 08:31:24'; window.__VER__ = 157; window.__NOTES__ = [{"v": 157, "date": "2026-11-22", "title": "Credit card: one big number", "notes": ["The only big number is what you still owe, in red.", "If nothing is owed you see a big green tick: Nothing to pay.", "Things already paid are small, grey and crossed out with a PAID tag."]}, {"v": 156, "date": "22 Nov", "title": "Credit card payment covers new purchases", "notes": ["When you pay more than the statement, the extra now pays the new purchases made up to the day you paid", "Total you owe on the card now only counts purchases after that payment, for example today's", "A line shows what your payment already covered"]}, {"v": 155, "date": "22 Nov", "title": "Overspending shown as negative", "notes": ["When you have spent more than your salary or budget, the big number on Summary now shows as negative, for example -\u20ac17.50, under Left from salary"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '23 Nov 06:17'; window.__BUILDMS__ = 1795443473138; window.__BID__ = '2026-11-23 06:17:53'; window.__VER__ = 158; window.__NOTES__ = [{"v": 158, "date": "2026-11-23", "title": "Winter theme", "notes": ["Winter colours: pine green, berry red and gold, with soft falling snow.", "Switch it off in Settings, Appearance, Winter theme.", "The opening screen uses the winter colours too."]}, {"v": 157, "date": "2026-11-22", "title": "Credit card: one big number", "notes": ["The only big number is what you still owe, in red.", "If nothing is owed you see a big green tick: Nothing to pay.", "Things already paid are small, grey and crossed out with a PAID tag."]}, {"v": 156, "date": "22 Nov", "title": "Credit card payment covers new purchases", "notes": ["When you pay more than the statement, the extra now pays the new purchases made up to the day you paid", "Total you owe on the card now only counts purchases after that payment, for example today's", "A line shows what your payment already covered"]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -2104,9 +2143,28 @@ function applyTheme() {
     else ms[i].setAttribute('content', t === 'dark' ? '#050608' : '#F2F5F1');
   }
 }
+
+function seasonOn() { try { return localStorage.getItem('pl-season') !== 'off'; } catch (e) { return true; } }
+function applySeason() {
+  const on = seasonOn(), r = document.documentElement;
+  if (on) r.setAttribute('data-season', 'winter'); else r.removeAttribute('data-season');
+  let sn = document.getElementById('snow');
+  if (on && !sn) {
+    sn = document.createElement('div'); sn.id = 'snow'; sn.setAttribute('aria-hidden', 'true');
+    let h = '';
+    for (let i = 0; i < 26; i++) {
+      const sz = 2 + (i * 7) % 4, x = (i * 37) % 100, w = ((i % 2) ? 1 : -1) * (14 + (i * 5) % 26), d = 11 + (i * 3) % 10, l = -((i * 13) % 20);
+      h += '<i style="--s:' + sz + 'px;--x:' + x + '%;--w:' + w + 'px;--d:' + d + 's;--l:' + l + 's;--o:' + (0.35 + (i % 5) * 0.12).toFixed(2) + '"></i>';
+    }
+    sn.innerHTML = h; document.body.insertBefore(sn, document.body.firstChild);
+  } else if (!on && sn) sn.parentNode.removeChild(sn);
+  const tcs = document.querySelectorAll('meta[name="theme-color"]');
+  if (on) for (let i = 0; i < tcs.length; i++) tcs[i].setAttribute('content', tcs[i].getAttribute('media') === '(prefers-color-scheme: dark)' ? '#08130F' : '#EEF3F2');
+}
 function themeNow() { try { return localStorage.getItem('pl-theme') || 'auto'; } catch (e) { return 'auto'; } }
 function hueOfName(n) { let h = 0; String(n).split('').forEach(function (c) { h = (h * 31 + c.charCodeAt(0)) % 360; }); return h; }
 applyTheme();
+applySeason();
 applyQuiet();
 const LS_KEY = 'pocket-ledger-v1';
 const OFFLINE = !!window.__OFFLINE__;
@@ -2632,7 +2690,7 @@ function homeHTML() {
       sparkSVG(DSg.days, L.today(), base, cur) +
       '<div class="stack3"><i class="s-f" style="width:' + wf.toFixed(1) + '%"></i><i class="s-v" style="width:' + wv.toFixed(1) + '%"></i><i class="s-l" style="width:' + wl.toFixed(1) + '%"></i></div>' +
       '<div class="legend3"><span><i class="s-f"></i>Bills ' + money(M.fixedSpent) + '</span><span><i class="s-v"></i>Everyday ' + money(M.varSpent) + '</span><span><i class="s-l"></i>' + (left >= 0 ? 'Left ' + money(left) : 'Over ' + money(-left)) + '</span></div>' +
-      '<div class="chips3"><div><b class="mono">' + money(M.spent) + '</b><span>Spent</span></div><div><b class="mono">' + (cur ? (left > 0 ? money(left / daysLeft) : '€0') : '–') + '</b><span>' + (cur ? 'Safe per day' : 'Closed') + '</span></div><div><b class="mono">' + day + '/' + dim + '</b><span>Day</span></div></div>' +
+      '<div class="chips3"><div><b class="mono">' + money(M.spent) + '</b><span>Spent</span></div><div><b class="mono">' + (cur ? (left > 0 ? money(left / daysLeft) : '\u20ac0') : '–') + '</b><span>' + (cur ? 'Safe per day' : 'Closed') + '</span></div><div><b class="mono">' + day + '/' + dim + '</b><span>Day</span></div></div>' +
       (status ? '<div style="margin-top:12px"><span class="pill ' + cls + '">' + status + '</span></div>' : '') +
       (bySalary && M.budget > 0 ? '<div class="hsub" style="font-size:13px;margin-top:10px">' + (M.budget > base ? 'Your budget of ' + money(M.budget) + ' is ' + money(M.budget - base) + ' over this salary.' : 'Your budget is ' + money(M.budget) + ', which leaves ' + money(base - M.budget) + ' for savings.') + '</div>' : '') + '</div>';
   } else {
@@ -3992,7 +4050,7 @@ function addTapsBulk(text) {
 function addHTML() {
   const link = S.profile.appLink || '';
   const tn = themeNow();
-  const appear = '<section><h2>Appearance</h2><div class="card pad"><div class="seg" style="grid-template-columns:repeat(4,1fr)">' + [['auto', 'Auto'], ['sky', 'Sky'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="theme-set" data-v="' + x[0] + '" aria-pressed="' + (tn === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' + (tn === 'sky' ? (function () { const s = skyNow(new Date()); return '<p class="small muted" style="margin:10px 0 0">Right now: ' + s.name + '. Colours follow the sun on your phone clock: sunrise about ' + hm(s.sr) + ', sunset about ' + hm(s.ss) + ' (estimated).</p>'; })() : '<p class="small muted" style="margin:10px 0 0">Sky: colours slowly change through sunrise, midday, sunset and night.</p>') + '<label class="inline" style="margin-top:12px"><input type="checkbox" data-act="quiet-set"' + (quietOn() ? ' checked' : '') + '> Quiet mode: blur the amounts. Tap one to show it.</label></div></section>';
+  const appear = '<section><h2>Appearance</h2><div class="card pad"><div class="seg" style="grid-template-columns:repeat(4,1fr)">' + [['auto', 'Auto'], ['sky', 'Sky'], ['light', 'Light'], ['dark', 'Dark']].map(function (x) { return '<button data-act="theme-set" data-v="' + x[0] + '" aria-pressed="' + (tn === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' + (tn === 'sky' ? (function () { const s = skyNow(new Date()); return '<p class="small muted" style="margin:10px 0 0">Right now: ' + s.name + '. Colours follow the sun on your phone clock: sunrise about ' + hm(s.sr) + ', sunset about ' + hm(s.ss) + ' (estimated).</p>'; })() : '<p class="small muted" style="margin:10px 0 0">Sky: colours slowly change through sunrise, midday, sunset and night.</p>') + '<label class="inline" style="margin-top:12px"><input type="checkbox" data-act="season-set"' + (seasonOn() ? ' checked' : '') + '> Winter theme: green, red and gold colours with light snow.</label><label class="inline" style="margin-top:12px"><input type="checkbox" data-act="quiet-set"' + (quietOn() ? ' checked' : '') + '> Quiet mode: blur the amounts. Tap one to show it.</label></div></section>';
   const tmpl = (link || 'YOUR-APP-LINK') + '#tap-[Date]-[Amount]-[Merchant]~~[Card or Pass]';
   return appear + '<section><h2>Quick add</h2><div class="card pad stack"><label>Merchant and amount<input id="qa" type="text" placeholder="Blue Bottle 5.50" autocomplete="off"></label>' +
     '<div class="btns"><button class="btn" data-act="quick-add">Add expense</button>' + (function () { const lm = lastManual(); return lm ? '<button class="btn ghost" data-act="repeat-last">Repeat: ' + esc(lm.m.length > 16 ? lm.m.slice(0, 15) + '…' : lm.m) + ' ' + (lm.oa != null && lm.oc ? moneyIn(lm.oa, lm.oc) : money(lm.a)) + '</button>' : ''; })() + '</div><div class="small muted" id="qahint">Type, or tap the microphone key on your keyboard and say, for example, Blue Bottle five fifty.</div></div></section>' +
@@ -5314,6 +5372,7 @@ function onAction(act, el) {
       mutate(function () { const p = S.profile; p.histSkip = {}; if (n > 0) ok.slice(0, Math.max(0, ok.length - n)).forEach(function (k) { p.histSkip[k] = true; }); markProfile(); });
       render(); break;
     }
+    case 'season-set': { try { localStorage.setItem('pl-season', el.checked ? 'on' : 'off'); } catch (e) { /* ignore */ } applySeason(); applyTheme(); render(); break; }
     case 'theme-set': { try { localStorage.setItem('pl-theme', el.dataset.v); } catch (e) { /* ignore */ } applyTheme(); render(); break; }
     case 'carry-fwd': case 'carry-save': case 'carry-skip': {
       const pk = L.addMonths(viewKey, -1);
