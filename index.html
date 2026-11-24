@@ -747,7 +747,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '24 Nov 02:19'; window.__BUILDMS__ = 1795515562855; window.__BID__ = '2026-11-24 02:19:22'; window.__VER__ = 160; window.__NOTES__ = [{"v": 160, "date": "2026-11-24", "title": "Free splits", "notes": ["Splitting money over pots is now fully free: no pot fills itself in.", "New buttons: Suggest a split, All in one pot, Clear.", "The line under the boxes shows how much is not placed yet."]}, {"v": 159, "date": "2026-11-24", "title": "Move extra income to a pot", "notes": ["Extra income now has a button: Put the money in my savings pots.", "You choose which pot gets it. Amounts already moved are shown.", "A note explains the app does not touch your bank."]}, {"v": 158, "date": "2026-11-23", "title": "Winter theme", "notes": ["Winter colours: pine green, berry red and gold, with soft falling snow.", "Switch it off in Settings, Appearance, Winter theme.", "The opening screen uses the winter colours too."]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '24 Nov 02:30'; window.__BUILDMS__ = 1795516242770; window.__BID__ = '2026-11-24 02:30:42'; window.__VER__ = 161; window.__NOTES__ = [{"v": 161, "date": "2026-11-24", "title": "Wish: I already bought it", "notes": ["New button on a wish: I already bought it.", "It only marks the wish as bought. It does not take money out of your pots again."]}, {"v": 160, "date": "2026-11-24", "title": "Free splits", "notes": ["Splitting money over pots is now fully free: no pot fills itself in.", "New buttons: Suggest a split, All in one pot, Clear.", "The line under the boxes shows how much is not placed yet."]}, {"v": 159, "date": "2026-11-24", "title": "Move extra income to a pot", "notes": ["Extra income now has a button: Put the money in my savings pots.", "You choose which pot gets it. Amounts already moved are shown.", "A note explains the app does not touch your bank."]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4601,7 +4601,7 @@ function wishlistHTML(exp) {
     }
     return '<div class="goal" style="--h:' + hueOfName(w.name) + '"><div class="top-row"><span class="nm">' + (w.kind === 'travel' ? '&#9992; ' : '&#127873; ') + esc(w.name) + '</span><span class="mono" style="font-size:18px">' + money(w.have || 0, true) + ' <span class="muted small">of ' + money(w.cost, true) + '</span></span></div>' +
       bar(pc, 'good') + cap + alt + lines + refillBlock(w) +
-      '<div class="btns"><button class="btn sm" data-act="wish-fund" data-id="' + esc(w.id) + '">Set aside / use savings</button>' + (pl.done ? '<button class="btn sm" data-act="wish-bought" data-id="' + esc(w.id) + '">Bought</button>' : '') + '<button class="btn sm ghost" data-act="wish-edit" data-id="' + esc(w.id) + '">Edit</button></div></div>';
+      '<div class="btns"><button class="btn sm" data-act="wish-fund" data-id="' + esc(w.id) + '">Set aside / use savings</button>' + (pl.done ? '<button class="btn sm" data-act="wish-bought" data-id="' + esc(w.id) + '">Bought</button>' : '<button class="btn sm ghost" data-act="wish-had" data-id="' + esc(w.id) + '">I already bought it</button>') + '<button class="btn sm ghost" data-act="wish-edit" data-id="' + esc(w.id) + '">Edit</button></div></div>';
   };
   const needsAll = ws.reduce(function (t, w) { return t + Math.max(0, w.cost - (w.have || 0)); }, 0);
   const head = ctx.known
@@ -5128,6 +5128,15 @@ function onAction(act, el) {
         w.have = Math.round(((w.have || 0) + a) * 100) / 100; markProfile();
       });
       closeSheet(); render(); toast('Set aside ' + money(a, true)); break;
+    }
+    case 'wish-had': {
+      const w = (S.profile.wishes || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (!w) break;
+      openSheet('<h3>You already bought ' + esc(w.name) + '?</h3><div class="stack"><p class="small muted">This only marks the wish as bought and removes it from the list. It does <b>not</b> take any money out of your pots, because you already did that yourself.</p><div class="btns"><button class="btn" data-act="wish-had-go" data-id="' + esc(w.id) + '">Yes, mark as bought</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+      break;
+    }
+    case 'wish-had-go': {
+      mutate(function () { const w = (S.profile.wishes || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (w) { w.done = L.today(); markProfile(); } });
+      closeSheet(); render(); toast('Marked as bought. Your pots did not change.'); break;
     }
     case 'wish-bought': {
       mutate(function () { const w = (S.profile.wishes || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (w) { w.done = L.today(); markProfile(); } });
