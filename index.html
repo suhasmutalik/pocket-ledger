@@ -747,7 +747,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '23 Nov 06:17'; window.__BUILDMS__ = 1795443473138; window.__BID__ = '2026-11-23 06:17:53'; window.__VER__ = 158; window.__NOTES__ = [{"v": 158, "date": "2026-11-23", "title": "Winter theme", "notes": ["Winter colours: pine green, berry red and gold, with soft falling snow.", "Switch it off in Settings, Appearance, Winter theme.", "The opening screen uses the winter colours too."]}, {"v": 157, "date": "2026-11-22", "title": "Credit card: one big number", "notes": ["The only big number is what you still owe, in red.", "If nothing is owed you see a big green tick: Nothing to pay.", "Things already paid are small, grey and crossed out with a PAID tag."]}, {"v": 156, "date": "22 Nov", "title": "Credit card payment covers new purchases", "notes": ["When you pay more than the statement, the extra now pays the new purchases made up to the day you paid", "Total you owe on the card now only counts purchases after that payment, for example today's", "A line shows what your payment already covered"]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '24 Nov 02:14'; window.__BUILDMS__ = 1795515243158; window.__BID__ = '2026-11-24 02:14:03'; window.__VER__ = 159; window.__NOTES__ = [{"v": 159, "date": "2026-11-24", "title": "Move extra income to a pot", "notes": ["Extra income now has a button: Put the money in my savings pots.", "You choose which pot gets it. Amounts already moved are shown.", "A note explains the app does not touch your bank."]}, {"v": 158, "date": "2026-11-23", "title": "Winter theme", "notes": ["Winter colours: pine green, berry red and gold, with soft falling snow.", "Switch it off in Settings, Appearance, Winter theme.", "The opening screen uses the winter colours too."]}, {"v": 157, "date": "2026-11-22", "title": "Credit card: one big number", "notes": ["The only big number is what you still owe, in red.", "If nothing is owed you see a big green tick: Nothing to pay.", "Things already paid are small, grey and crossed out with a PAID tag."]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -3497,13 +3497,17 @@ function incomeTypeOptions(sel) { return INCOME_TYPES.map(function (x) { return 
 function incomeTypeName(k) { const f = INCOME_TYPES.filter(function (x) { return x[0] === k; })[0]; return f ? f[1] : ''; }
 function extraHTML(M) {
   const E = M.extra;
+  const moved = ((S.profile.extraMoved || {})[viewKey]) || 0, rest = Math.max(0, Math.round((E.toSavings - moved) * 100) / 100);
   const keys = Object.keys(E.by).filter(function (k) { return E.by[k] > 0; });
   if (!(E.total > 0) && !keys.length) return '';
   const rows = keys.map(function (k) { return '<div class="kv"><span>' + incomeTypeName(k) + '</span><span class="mono">' + money(E.by[k]) + '</span></div>'; }).join('') + (E.perdiemNet > 0 ? '<div class="kv"><span>Per diem left after trip spending</span><span class="mono">' + money(E.perdiemNet) + '</span></div>' : '');
   return '<section><h2>Extra income</h2><div class="card list">' + rows +
     (E.covers > 0 ? '<div class="kv"><span>Covered spending above your salary</span><span class="mono neg">-' + money(E.covers) + '</span></div>' : '') +
     '<div class="kv"><span><b>Extra that moves to savings</b></span><span class="mono"><b>' + money(E.toSavings) + '</b></span></div>' +
-    '<div class="kv"><span>Can go to savings this month, with unspent salary</span><span class="mono"><b>' + money(E.canSave) + '</b></span></div></div></section>';
+    (moved > 0 ? '<div class="kv"><span>Already put in your savings pots</span><span class="mono"><b>' + money(moved) + '</b></span></div>' : '') +
+    '<div class="kv"><span>Can go to savings this month, with unspent salary</span><span class="mono"><b>' + money(E.canSave) + '</b></span></div></div>' +
+    '<div class="card pad stack" style="margin-top:10px"><p class="small muted" style="margin:0">' + (rest > 0.004 ? 'This is only a number for now. It is not in any pot yet. Tap the button to choose which savings pot gets it.' : 'All of the extra income is in your savings pots.') + ' In your bank, move the same money to your savings account yourself. The app does not touch your bank.</p>' +
+    '<div class="btns">' + (rest > 0.004 ? '<button class="btn" data-act="extra-move">Put ' + money(rest) + ' in my savings pots</button>' : '') + '<button class="btn ghost" data-act="goto-savings">See my savings pots</button></div></div></section>';
 }
 function riseMoney(x, cur) { return cur ? moneyIn(x, cur, true) : money(x, true); }
 function priceAlertHTML() {
@@ -4451,6 +4455,16 @@ function moveSheet(tripId) {
     '<div class="btns"><button class="btn" data-act="save-move" data-id="' + esc(tripId) + '">Move</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
   wireSplit(function () { return left; });
 }
+function extraSheet() {
+  const M = L.monthSummary(S.profile, S.months, viewKey), E = M.extra;
+  const moved = ((S.profile.extraMoved || {})[viewKey]) || 0, rest = Math.max(0, Math.round((E.toSavings - moved) * 100) / 100);
+  const gs = S.profile.goals || [];
+  if (!(rest > 0)) { toast('Nothing left to move'); return; }
+  openSheet('<h3>Put the extra income in savings</h3><div class="stack"><p class="small muted">Overtime, bonus and other extra money: ' + money(rest, true) + '. Choose which pot gets it. This updates the pots in this app. Move the real money to your savings account in your bank too.</p>' +
+    splitFieldsHTML(gs[0] ? { id: gs[0].id, v: rest } : null) +
+    '<div class="btns"><button class="btn" data-act="extra-move-go">Move</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
+  wireSplit(function () { return rest; });
+}
 function xferSheet(id) {
   const gs = S.profile.goals || [], g = gs.filter(function (x) { return x.id === id; })[0];
   if (!g) return;
@@ -5243,6 +5257,16 @@ function onAction(act, el) {
       });
       render(); toast('Per diem is expected again'); break;
     case 'move-left': moveSheet(el.dataset.id); break;
+    case 'goto-savings': setTab('savings'); break;
+    case 'extra-move': extraSheet(); break;
+    case 'extra-move-go': {
+      const M0 = L.monthSummary(S.profile, S.months, viewKey), mv0 = ((S.profile.extraMoved || {})[viewKey]) || 0, rest0 = Math.max(0, Math.round((M0.extra.toSavings - mv0) * 100) / 100);
+      const sp = readSplit(rest0); if (!sp) break;
+      const tot = sp.parts.reduce(function (t, x) { return t + x.v; }, 0) + sp.na;
+      if (!(tot > 0)) { toast('Enter an amount'); break; }
+      mutate(function () { S.profile.extraMoved = S.profile.extraMoved || {}; S.profile.extraMoved[viewKey] = Math.round((mv0 + tot) * 100) / 100; applySplit(sp, 'Extra income: overtime and bonus'); markProfile(); });
+      closeSheet(); render(); toast('Put in your savings pots'); break;
+    }
     case 'save-move': {
       const t0 = (S.profile.trips || []).filter(function (x) { return x.id === el.dataset.id; })[0]; if (!t0) break;
       const m0 = tripMoney(t0), left0 = Math.max(0, Math.round((m0.left - (t0.moved || 0)) * 100) / 100);
