@@ -747,7 +747,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '24 Nov 02:14'; window.__BUILDMS__ = 1795515243158; window.__BID__ = '2026-11-24 02:14:03'; window.__VER__ = 159; window.__NOTES__ = [{"v": 159, "date": "2026-11-24", "title": "Move extra income to a pot", "notes": ["Extra income now has a button: Put the money in my savings pots.", "You choose which pot gets it. Amounts already moved are shown.", "A note explains the app does not touch your bank."]}, {"v": 158, "date": "2026-11-23", "title": "Winter theme", "notes": ["Winter colours: pine green, berry red and gold, with soft falling snow.", "Switch it off in Settings, Appearance, Winter theme.", "The opening screen uses the winter colours too."]}, {"v": 157, "date": "2026-11-22", "title": "Credit card: one big number", "notes": ["The only big number is what you still owe, in red.", "If nothing is owed you see a big green tick: Nothing to pay.", "Things already paid are small, grey and crossed out with a PAID tag."]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '24 Nov 02:19'; window.__BUILDMS__ = 1795515562855; window.__BID__ = '2026-11-24 02:19:22'; window.__VER__ = 160; window.__NOTES__ = [{"v": 160, "date": "2026-11-24", "title": "Free splits", "notes": ["Splitting money over pots is now fully free: no pot fills itself in.", "New buttons: Suggest a split, All in one pot, Clear.", "The line under the boxes shows how much is not placed yet."]}, {"v": 159, "date": "2026-11-24", "title": "Move extra income to a pot", "notes": ["Extra income now has a button: Put the money in my savings pots.", "You choose which pot gets it. Amounts already moved are shown.", "A note explains the app does not touch your bank."]}, {"v": 158, "date": "2026-11-23", "title": "Winter theme", "notes": ["Winter colours: pine green, berry red and gold, with soft falling snow.", "Switch it off in Settings, Appearance, Winter theme.", "The opening screen uses the winter colours too."]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4394,18 +4394,34 @@ function ccDue() {
 }
 function splitFieldsHTML(def) {
   const gs = S.profile.goals || [], cc = ccDue();
-  return (cc ? '<label>Used to pay the credit card bill <span class="muted small">(still to pay ' + money(cc.remaining, true) + ')</span><input id="sp-cc" data-sp type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></label>' : '') + gs.map(function (g, i) { return '<label>' + esc(g.name) + ' <span class="muted small">(now ' + money(g.saved) + ')</span><input id="sp-' + i + '" data-sp type="number" inputmode="decimal" step="0.01" min="0" value="' + (def && def.id === g.id ? def.v : '') + '" placeholder="0"></label>'; }).join('') +
+  return (cc ? '<label>Used to pay the credit card bill <span class="muted small">(still to pay ' + money(cc.remaining, true) + ')</span><input id="sp-cc" data-sp type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></label>' : '') + gs.map(function (g, i) { return '<label>' + esc(g.name) + ' <span class="muted small">(now ' + money(g.saved) + ')</span><input id="sp-' + i + '" data-sp type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></label>'; }).join('') +
     '<label>Or a new savings account<input id="sp-new-n" type="text" placeholder="Name, for example ABN savings"></label><label>Amount for the new account<input id="sp-new-a" data-sp type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></label><p class="small muted" id="sp-left"></p>';
+}
+function splitHelpHTML(first) {
+  return '<div class="stack"><div class="btns"><button class="btn sm ghost" data-act="sp-suggest">Suggest a split</button>' + (first ? '<button class="btn sm ghost" data-act="sp-all">All in ' + esc(first.name) + '</button>' : '') + '<button class="btn sm ghost" data-act="sp-clear">Clear</button></div><p class="small muted" id="sp-sug" style="margin:0">Type any amount in any box. Nothing is filled in for you.</p></div>';
+}
+var SPLIT_TOTAL = null;
+function suggestSplit(total) {
+  const gs = S.profile.goals || [], out = gs.map(function () { return 0; });
+  if (!gs.length || !(total > 0)) return { v: out, why: '' };
+  const need = gs.map(function (g) { return g.target > 0 ? Math.max(0, g.target - g.saved) : 0; });
+  const sumN = need.reduce(function (a, b) { return a + b; }, 0);
+  if (!(sumN > 0)) { out[0] = Math.round(total * 100) / 100; return { v: out, why: 'None of your pots has a target to fill, so all of it goes in ' + gs[0].name + '.' }; }
+  let left = total;
+  gs.forEach(function (g, i) { if (need[i] > 0) { const x = Math.min(need[i], Math.floor(total * need[i] / sumN)); out[i] = x; left -= x; } });
+  let guard = 0;
+  while (left > 0.004 && guard++ < 50) {
+    let best = -1; gs.forEach(function (g, i) { if (need[i] - out[i] > 0.004 && (best < 0 || need[i] - out[i] > need[best] - out[best])) best = i; });
+    if (best < 0) { const i0 = gs.findIndex(function (g) { return !/emergency/i.test(g.name); }); out[i0 < 0 ? 0 : i0] += left; left = 0; break; }
+    const x = Math.min(left, need[best] - out[best]); out[best] += x; left -= x;
+  }
+  return { v: out.map(function (x) { return Math.round(x * 100) / 100; }), why: 'Suggestion: shared by how much each pot still needs to reach its target. Change any box you like.' };
 }
 function wireSplit(getTotal) {
   const upd = function () { let t = 0; document.querySelectorAll('[data-sp]').forEach(function (i) { t += parseFloat(i.value) || 0; }); const l = Math.round((getTotal() - t) * 100) / 100; const e = document.getElementById('sp-left'); if (e) e.textContent = l > 0.004 ? money(l, true) + ' stays as normal money.' : (l < -0.004 ? 'Too much by ' + money(-l, true) : 'All placed.'); };
-  const auto = Array.prototype.filter.call(document.querySelectorAll('[data-sp]'), function (i) { return i.id !== 'sp-cc' && i.id !== 'sp-new-a' && i.value !== ''; })[0];
+  SPLIT_TOTAL = getTotal;
   document.querySelectorAll('[data-sp],#al-amt').forEach(function (i) {
     i.addEventListener('input', function () {
-      if (auto && i !== auto && i.id !== 'al-amt') {
-        let o = 0; document.querySelectorAll('[data-sp]').forEach(function (x) { if (x !== auto) o += parseFloat(x.value) || 0; });
-        const r = Math.round((getTotal() - o) * 100) / 100; auto.value = r > 0.004 ? r : '';
-      }
       upd();
     });
   }); upd();
@@ -4432,7 +4448,7 @@ function splitSheet(id) {
   const o = (S.profile.owed || []).filter(function (x) { return x.id === id; })[0]; if (!o) return;
   const gs = S.profile.goals || [];
   openSheet('<h3>Where does ' + money(o.amount, true) + ' go?</h3><div class="stack"><p class="small muted">' + esc(o.name) + '. Split it over your savings accounts as you like.</p>' +
-    splitFieldsHTML((gs.filter(function (x) { return x.id === o.pot; })[0] || gs[0]) ? { id: (gs.filter(function (x) { return x.id === o.pot; })[0] || gs[0]).id, v: o.amount } : null) +
+    splitHelpHTML(gs.filter(function (x) { return x.id === o.pot; })[0] || gs[0]) + splitFieldsHTML(null)+
     '<div class="btns"><button class="btn" data-act="owed-split-go" data-id="' + esc(o.id) + '">Received</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
   wireSplit(function () { return o.amount; });
 }
@@ -4451,7 +4467,7 @@ function moveSheet(tripId) {
   const left = Math.max(0, Math.round((m.left - (t.moved || 0)) * 100) / 100);
   const gs = S.profile.goals || [];
   openSheet('<h3>Move what is left to savings</h3><div class="stack"><p class="small muted">Per diem left after trip spending for ' + esc(t.name) + '. You can have up to ' + money(left, true) + '. Split it over your savings accounts.</p>' +
-    splitFieldsHTML(gs[0] ? { id: gs[0].id, v: left } : null) +
+    splitHelpHTML(gs[0]) + splitFieldsHTML(null) +
     '<div class="btns"><button class="btn" data-act="save-move" data-id="' + esc(tripId) + '">Move</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
   wireSplit(function () { return left; });
 }
@@ -4461,7 +4477,7 @@ function extraSheet() {
   const gs = S.profile.goals || [];
   if (!(rest > 0)) { toast('Nothing left to move'); return; }
   openSheet('<h3>Put the extra income in savings</h3><div class="stack"><p class="small muted">Overtime, bonus and other extra money: ' + money(rest, true) + '. Choose which pot gets it. This updates the pots in this app. Move the real money to your savings account in your bank too.</p>' +
-    splitFieldsHTML(gs[0] ? { id: gs[0].id, v: rest } : null) +
+    splitHelpHTML(gs[0]) + splitFieldsHTML(null) +
     '<div class="btns"><button class="btn" data-act="extra-move-go">Move</button><button class="btn ghost" data-act="sheet-close">Cancel</button></div></div>');
   wireSplit(function () { return rest; });
 }
@@ -5257,6 +5273,15 @@ function onAction(act, el) {
       });
       render(); toast('Per diem is expected again'); break;
     case 'move-left': moveSheet(el.dataset.id); break;
+    case 'sp-clear': { document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; }); const n = document.getElementById('sp-new-n'); if (n) n.value = ''; const d = document.querySelector('[data-sp]'); if (d) d.dispatchEvent(new Event('input')); break; }
+    case 'sp-all': { const tot = SPLIT_TOTAL ? SPLIT_TOTAL() : 0; document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; }); const f = document.getElementById('sp-0'); if (f && tot > 0) f.value = tot; if (f) f.dispatchEvent(new Event('input')); break; }
+    case 'sp-suggest': {
+      const tot = SPLIT_TOTAL ? SPLIT_TOTAL() : 0, sg = suggestSplit(tot);
+      document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; });
+      sg.v.forEach(function (x, k) { const f = document.getElementById('sp-' + k); if (f && x > 0) f.value = x; });
+      const e = document.getElementById('sp-sug'); if (e) e.textContent = sg.why;
+      const d = document.querySelector('[data-sp]'); if (d) d.dispatchEvent(new Event('input')); break;
+    }
     case 'goto-savings': setTab('savings'); break;
     case 'extra-move': extraSheet(); break;
     case 'extra-move-go': {
