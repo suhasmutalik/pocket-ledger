@@ -747,7 +747,7 @@ html.sky #sheet .card, html.sky #sheet .fold { background: var(--surface); }
 <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" hidden></div>
-<script>window.__OFFLINE__ = true; window.__BUILD__ = '24 Nov 02:42'; window.__BUILDMS__ = 1795516968909; window.__BID__ = '2026-11-24 02:42:48'; window.__VER__ = 163; window.__NOTES__ = [{"v": 163, "date": "2026-11-24", "title": "Savings refill plan", "notes": ["After a wish is bought with savings, a refill plan is made: a monthly amount on a day you choose.", "It shows in the calendar, in Coming up, and in Budget under Savings refill plan, and it takes money off Free to spend.", "Change the amount or day, skip a month, stop the plan, or put money back early at any time."]}, {"v": 162, "date": "2026-11-24", "title": "Allowance counts completed weeks", "notes": ["Assignment allowance now counts only completed weeks, for example 4 weeks and 3 days counts 4 weeks.", "The trip shows when the next week is complete and what it adds.", "You can switch a trip to every day, pro rata in the trip form."]}, {"v": 161, "date": "2026-11-24", "title": "Wish: I already bought it", "notes": ["New button on a wish: I already bought it.", "It only marks the wish as bought. It does not take money out of your pots again."]}];</script>
+<script>window.__OFFLINE__ = true; window.__BUILD__ = '24 Nov 02:50'; window.__BUILDMS__ = 1795517421347; window.__BID__ = '2026-11-24 02:50:21'; window.__VER__ = 164; window.__NOTES__ = [{"v": 164, "date": "2026-11-24", "title": "Balanced splits", "notes": ["After Suggest a split, changing one pot makes the other pots adjust so the total stays the same.", "A tick box turns this on or off, so you can still split freely."]}, {"v": 163, "date": "2026-11-24", "title": "Savings refill plan", "notes": ["After a wish is bought with savings, a refill plan is made: a monthly amount on a day you choose.", "It shows in the calendar, in Coming up, and in Budget under Savings refill plan, and it takes money off Free to spend.", "Change the amount or day, skip a month, stop the plan, or put money back early at any time."]}, {"v": 162, "date": "2026-11-24", "title": "Allowance counts completed weeks", "notes": ["Assignment allowance now counts only completed weeks, for example 4 weeks and 3 days counts 4 weeks.", "The trip shows when the next week is complete and what it adds.", "You can switch a trip to every day, pro rata in the trip form."]}];</script>
 <script>
 /* Pocket Ledger logic: pure functions, no DOM. */
 (function (root) {
@@ -4434,7 +4434,7 @@ function splitFieldsHTML(def) {
     '<label>Or a new savings account<input id="sp-new-n" type="text" placeholder="Name, for example ABN savings"></label><label>Amount for the new account<input id="sp-new-a" data-sp type="number" inputmode="decimal" step="0.01" min="0" placeholder="0"></label><p class="small muted" id="sp-left"></p>';
 }
 function splitHelpHTML(first) {
-  return '<div class="stack"><div class="btns"><button class="btn sm ghost" data-act="sp-suggest">Suggest a split</button>' + (first ? '<button class="btn sm ghost" data-act="sp-all">All in ' + esc(first.name) + '</button>' : '') + '<button class="btn sm ghost" data-act="sp-clear">Clear</button></div><p class="small muted" id="sp-sug" style="margin:0">Type any amount in any box. Nothing is filled in for you.</p></div>';
+  return '<div class="stack"><div class="btns"><button class="btn sm ghost" data-act="sp-suggest">Suggest a split</button>' + (first ? '<button class="btn sm ghost" data-act="sp-all">All in ' + esc(first.name) + '</button>' : '') + '<button class="btn sm ghost" data-act="sp-clear">Clear</button></div><label class="inline"><input type="checkbox" id="sp-link"> Keep the total: when I change one pot, the other pots adjust</label><p class="small muted" id="sp-sug" style="margin:0">Type any amount in any box. Nothing is filled in for you.</p></div>';
 }
 var SPLIT_TOTAL = null;
 function suggestSplit(total) {
@@ -4458,6 +4458,19 @@ function wireSplit(getTotal) {
   SPLIT_TOTAL = getTotal;
   document.querySelectorAll('[data-sp],#al-amt').forEach(function (i) {
     i.addEventListener('input', function () {
+      const lk = document.getElementById('sp-link');
+      if (lk && lk.checked && /^sp-\d+$/.test(i.id) && !i.dataset.skipbal) {
+        const tot = getTotal(), v = Math.min(Math.max(parseFloat(i.value) || 0, 0), tot), R = Math.round((tot - v) * 100) / 100;
+        const others = Array.prototype.filter.call(document.querySelectorAll('[data-sp]'), function (x) { return x !== i && /^sp-\d+$/.test(x.id); });
+        const S = others.reduce(function (a, x) { return a + (parseFloat(x.value) || 0); }, 0);
+        if (S > 0.004 || R <= 0.004) {
+          let given = 0; const act = others.filter(function (x) { return (parseFloat(x.value) || 0) > 0; });
+          act.forEach(function (x, k) {
+            let nv = R <= 0.004 ? 0 : (k === act.length - 1 ? Math.round((R - given) * 100) / 100 : Math.round((parseFloat(x.value) || 0) * R / S * 100) / 100);
+            if (nv < 0) nv = 0; given += nv; x.value = nv > 0 ? nv : '';
+          });
+        }
+      }
       upd();
     });
   }); upd();
@@ -5374,13 +5387,14 @@ function onAction(act, el) {
       });
       render(); toast('Per diem is expected again'); break;
     case 'move-left': moveSheet(el.dataset.id); break;
-    case 'sp-clear': { document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; }); const n = document.getElementById('sp-new-n'); if (n) n.value = ''; const d = document.querySelector('[data-sp]'); if (d) d.dispatchEvent(new Event('input')); break; }
-    case 'sp-all': { const tot = SPLIT_TOTAL ? SPLIT_TOTAL() : 0; document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; }); const f = document.getElementById('sp-0'); if (f && tot > 0) f.value = tot; if (f) f.dispatchEvent(new Event('input')); break; }
+    case 'sp-clear': { const lkc = document.getElementById('sp-link'); if (lkc) lkc.checked = false; document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; }); const n = document.getElementById('sp-new-n'); if (n) n.value = ''; const d = document.querySelector('[data-sp]'); if (d) d.dispatchEvent(new Event('input')); break; }
+    case 'sp-all': { const lka = document.getElementById('sp-link'); if (lka) lka.checked = false; const tot = SPLIT_TOTAL ? SPLIT_TOTAL() : 0; document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; }); const f = document.getElementById('sp-0'); if (f && tot > 0) f.value = tot; if (f) f.dispatchEvent(new Event('input')); break; }
     case 'sp-suggest': {
       const tot = SPLIT_TOTAL ? SPLIT_TOTAL() : 0, sg = suggestSplit(tot);
       document.querySelectorAll('[data-sp]').forEach(function (i) { i.value = ''; });
       sg.v.forEach(function (x, k) { const f = document.getElementById('sp-' + k); if (f && x > 0) f.value = x; });
-      const e = document.getElementById('sp-sug'); if (e) e.textContent = sg.why;
+      const e = document.getElementById('sp-sug'); if (e) e.textContent = sg.why + ' The other pots now adjust when you change one. Untick the box to split freely.';
+      const lk0 = document.getElementById('sp-link'); if (lk0) lk0.checked = true;
       const d = document.querySelector('[data-sp]'); if (d) d.dispatchEvent(new Event('input')); break;
     }
     case 'goto-savings': setTab('savings'); break;
